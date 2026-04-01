@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  TextInput,
   Switch,
   Alert,
 } from 'react-native';
@@ -20,6 +21,16 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { clearAuth } = useAuthStore();
   const { settings, saveSettings } = useSettingsStore();
+  const [isEditingUrl, setIsEditingUrl] = React.useState(false);
+  const [tempUrl, setTempUrl] = React.useState(settings?.backend_url || '');
+
+  const handleSaveUrl = async () => {
+    if (settings && tempUrl.trim()) {
+      await saveSettings({ ...settings, backend_url: tempUrl.trim() });
+      setIsEditingUrl(false);
+      Alert.alert('Success', 'Backend URL updated! Please restart the app if it doesn\'t refresh.');
+    }
+  };
 
   const handleLogout = async () => {
     Alert.alert(
@@ -66,7 +77,28 @@ export default function SettingsScreen() {
             <Ionicons name="server-outline" size={24} color={colors.primary} />
             <View style={styles.rowContent}>
               <Text style={styles.rowLabel}>Backend URL</Text>
-              <Text style={styles.rowValue}>{settings?.backend_url}</Text>
+              {isEditingUrl ? (
+                <View style={styles.urlEditRow}>
+                  <TextInput
+                    style={styles.urlInput}
+                    value={tempUrl}
+                    onChangeText={setTempUrl}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholder="https://..."
+                  />
+                  <TouchableOpacity onPress={handleSaveUrl} style={styles.saveIconButton}>
+                    <Ionicons name="checkmark-circle" size={32} color={colors.success} />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.urlDisplayRow}>
+                  <Text style={styles.rowValue}>{settings?.backend_url}</Text>
+                  <TouchableOpacity onPress={() => { setIsEditingUrl(true); setTempUrl(settings?.backend_url || ''); }}>
+                    <Ionicons name="create-outline" size={20} color={colors.primary} />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -186,6 +218,29 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
     marginVertical: spacing.sm,
+  },
+  urlDisplayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  urlEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  urlInput: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.md,
+    padding: spacing.sm,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  saveIconButton: {
+    padding: 2,
   },
   logoutButton: {
     flexDirection: 'row',

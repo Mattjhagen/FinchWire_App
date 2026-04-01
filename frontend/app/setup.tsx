@@ -92,32 +92,13 @@ export default function SetupScreen() {
             autoCorrect={false}
             keyboardType="url"
           />
-          <Text style={styles.hint}>
-            This is your media server URL
-          </Text>
-
-          <Text style={[styles.label, { marginTop: spacing.lg }]}>Admin Password</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Enter your password"
-            placeholderTextColor={colors.textTertiary}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <Text style={styles.hint}>
-            Your MEDIA_DROP_ADMIN_PASSWORD
-          </Text>
-
           <TouchableOpacity
             style={[styles.button, isLoading && styles.buttonDisabled]}
             onPress={handleSetup}
             disabled={isLoading}
           >
             <Text style={styles.buttonText}>
-              {isLoading ? 'Setting up...' : 'Continue'}
+              {isLoading ? 'Get Started' : 'Continue'}
             </Text>
             <Ionicons name="arrow-forward" size={20} color={colors.buttonText} />
           </TouchableOpacity>
