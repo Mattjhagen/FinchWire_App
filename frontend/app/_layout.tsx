@@ -14,17 +14,14 @@ const queryClient = new QueryClient();
 function RootLayoutNav() {
   const router = useRouter();
   const segments = useSegments();
-  const { isAuthenticated, isLoading, loadAuth, checkSetupComplete } = useAuthStore();
+  const { isAuthenticated, isLoading, loadAuth, setupComplete, markSetupComplete } = useAuthStore();
   const { settings, loadSettings } = useSettingsStore();
-  const [setupComplete, setSetupComplete] = React.useState<boolean | null>(null);
 
   // Initialize stores and services
   useEffect(() => {
     const init = async () => {
       await loadSettings();
       await loadAuth();
-      const isSetupDone = await checkSetupComplete();
-      setSetupComplete(isSetupDone);
       
       // Initialize storage service (skip on web due to WASM issues)
       try {
