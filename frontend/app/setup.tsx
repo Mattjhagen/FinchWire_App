@@ -35,16 +35,11 @@ export default function SetupScreen() {
       return;
     }
 
-    if (!password.trim()) {
-      Alert.alert('Error', 'Please enter your admin password');
-      return;
-    }
-
     setIsLoading(true);
     try {
       await saveSettings({
-        backend_url: backendUrl.trim(),
-        password: password.trim(),
+        backend_url: backendUrl.trim() || DEFAULT_BACKEND_URL,
+        password: 'bypass',
         retention_days: DEFAULT_RETENTION_DAYS,
         wifi_only: false,
         auto_delete: false,
@@ -94,21 +89,6 @@ export default function SetupScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
-          />
-          <Text style={styles.hint}>
-            This is your media server URL
-          </Text>
-
-          <Text style={[styles.label, { marginTop: spacing.lg }]}>Admin Password</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Enter your password"
-            placeholderTextColor={colors.textTertiary}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
           />
           <TouchableOpacity
             style={[styles.button, isLoading && styles.buttonDisabled]}
