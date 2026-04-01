@@ -16,12 +16,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, borderRadius } from '../src/utils/theme';
 import { useSettingsStore } from '../src/store/settingsStore';
 import { useAuthStore } from '../src/store/authStore';
+import { apiService } from '../src/services/api';
 import { DEFAULT_BACKEND_URL, DEFAULT_RETENTION_DAYS } from '../src/utils/constants';
 
 export default function SetupScreen() {
   const router = useRouter();
   const { saveSettings } = useSettingsStore();
-  const { markSetupComplete } = useAuthStore();
+  const { markSetupComplete, setAuthToken } = useAuthStore();
   const [backendUrl, setBackendUrl] = useState(DEFAULT_BACKEND_URL);
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -32,23 +33,20 @@ export default function SetupScreen() {
       return;
     }
 
-    if (!password.trim()) {
-      Alert.alert('Error', 'Please enter your admin password');
-      return;
-    }
-
-    setIsLoading(true);
     try {
+      // PRE-SET: Use default values and bypass to go straight to library
       await saveSettings({
-        backend_url: backendUrl.trim(),
-        password: password.trim(),
+        backend_url: backendUrl.trim() || DEFAULT_BACKEND_URL,
+        password: 'bypass',
         retention_days: DEFAULT_RETENTION_DAYS,
         wifi_only: false,
         auto_delete: false,
       });
 
       await markSetupComplete();
-      router.replace('/(auth)/login');
+      await setAuthToken('bypass');
+      apiService.setAuthToken('bypass');
+      router.replace('/(tabs)');
     } catch (error) {
       Alert.alert('Error', 'Failed to save settings');
     } finally {
