@@ -32,7 +32,9 @@ export default function LoginScreen() {
 
     setIsLoading(true);
     try {
+      console.log('Attempting login to:', settings?.backend_url);
       const response = await apiService.login(password);
+      console.log('Login response:', response);
       
       if (response.success) {
         await setAuthToken(password);
@@ -41,8 +43,12 @@ export default function LoginScreen() {
       } else {
         Alert.alert('Login Failed', response.error || 'Invalid password');
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to connect to server. Check your network connection.');
+    } catch (error: any) {
+      console.error('Login error:', error);
+      Alert.alert(
+        'Login Error', 
+        error?.message || 'Failed to connect to server. Please check:\n\n1. Backend URL is correct\n2. Server is running\n3. Network connection is active'
+      );
     } finally {
       setIsLoading(false);
     }

@@ -24,6 +24,8 @@ class ApiService {
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     
+    console.log('API Request:', url, options?.method || 'GET');
+    
     try {
       const response = await fetch(url, {
         ...options,
@@ -33,14 +35,22 @@ class ApiService {
         },
       });
 
+      console.log('API Response status:', response.status);
+
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Request failed' }));
+        const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+        console.error('API Error:', error);
         throw new Error(error.error || `HTTP ${response.status}`);
       }
 
-      return await response.json();
-    } catch (error) {
-      console.error('API Error:', error);
+      const data = await response.json();
+      console.log('API Response data:', data);
+      return data;
+    } catch (error: any) {
+      console.error('API Request failed:', error);
+      if (error.message.includes('Network request failed') || error.message.includes('Failed to fetch')) {
+        throw new Error('Cannot connect to server. Please check your internet connection and backend URL.');
+      }
       throw error;
     }
   }
