@@ -14,14 +14,14 @@ class ApiService {
     this.authToken = token;
   }
 
-  private getHeaders(): HeadersInit {
+  private getHeaders(skipToken: boolean = false): HeadersInit {
     return {
       'Content-Type': 'application/json',
-      ...(this.authToken ? { 'x-finchwire-token': this.authToken } : {}),
+      ...((this.authToken && !skipToken) ? { 'x-finchwire-token': this.authToken } : {}),
     };
   }
 
-  private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  private async request<T>(endpoint: string, options?: RequestInit, skipToken: boolean = false): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     
     console.log('API Request:', url, options?.method || 'GET');
@@ -30,7 +30,7 @@ class ApiService {
       const response = await fetch(url, {
         ...options,
         headers: {
-          ...this.getHeaders(),
+          ...this.getHeaders(skipToken),
           ...options?.headers,
         },
       });
@@ -60,7 +60,7 @@ class ApiService {
     return this.request<AuthResponse>(API_ENDPOINTS.LOGIN, {
       method: 'POST',
       body: JSON.stringify({ password }),
-    });
+    }, true);
   }
 
   async logout(): Promise<{ success: boolean }> {
