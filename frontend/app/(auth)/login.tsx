@@ -33,12 +33,9 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       console.log('Attempting login to:', settings?.backend_url);
-      // BYPASS: Always allow for personal use
-      await setAuthToken('bypass');
-      apiService.setAuthToken('bypass');
-      router.replace('/(tabs)');
-      /*
       const response = await apiService.login(password);
+      console.log('Login response:', response);
+      
       if (response.success) {
         await setAuthToken(password);
         apiService.setAuthToken(password);
@@ -46,7 +43,6 @@ export default function LoginScreen() {
       } else {
         Alert.alert('Login Failed', response.error || 'Invalid password');
       }
-      */
     } catch (error: any) {
       console.error('Login error:', error);
       Alert.alert(
