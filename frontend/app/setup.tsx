@@ -10,6 +10,7 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +27,7 @@ export default function SetupScreen() {
   const [backendUrl, setBackendUrl] = useState(DEFAULT_BACKEND_URL);
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   const handleSetup = async () => {
     if (!backendUrl.trim()) {
@@ -33,20 +35,23 @@ export default function SetupScreen() {
       return;
     }
 
+    if (!password.trim()) {
+      Alert.alert('Error', 'Please enter your admin password');
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      // PRE-SET: Use default values and bypass to go straight to library
       await saveSettings({
-        backend_url: backendUrl.trim() || DEFAULT_BACKEND_URL,
-        password: 'bypass',
+        backend_url: backendUrl.trim(),
+        password: password.trim(),
         retention_days: DEFAULT_RETENTION_DAYS,
         wifi_only: false,
         auto_delete: false,
       });
 
       await markSetupComplete();
-      await setAuthToken('bypass');
-      apiService.setAuthToken('bypass');
-      router.replace('/(tabs)');
+      router.replace('/(auth)/login');
     } catch (error) {
       Alert.alert('Error', 'Failed to save settings');
     } finally {
@@ -97,7 +102,74 @@ export default function SetupScreen() {
             </Text>
             <Ionicons name="arrow-forward" size={20} color={colors.buttonText} />
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.helpButton}
+            onPress={() => setShowHelp(true)}
+          >
+            <Ionicons name="help-circle-outline" size={20} color={colors.primary} />
+            <Text style={styles.helpButtonText}>How do I set this up?</Text>
+          </TouchableOpacity>
         </View>
+
+        {/* Setup Help Modal */}
+        <Modal
+          visible={showHelp}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowHelp(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Server Setup Guide</Text>
+                <TouchableOpacity onPress={() => setShowHelp(false)}>
+                  <Ionicons name="close" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalScroll}>
+                <Text style={styles.stepTitle}>1. Requirements</Text>
+                <Text style={styles.stepText}>
+                  You need a Linux server or NAS (Ubuntu/Debian) to host your media backend.
+                </Text>
+
+                <Text style={styles.stepTitle}>2. Installation</Text>
+                <Text style={styles.codeBlock}>
+                  git clone https://github.com/Mattjhagen/YT-Download.git{"\n"}
+                  cd YT-Download/app{"\n"}
+                  npm install
+                </Text>
+
+                <Text style={styles.stepTitle}>3. Configuration</Text>
+                <Text style={styles.stepText}>
+                  Set your admin password in a .env file:
+                </Text>
+                <Text style={styles.codeBlock}>
+                  MEDIA_DROP_ADMIN_PASSWORD=your_password
+                </Text>
+
+                <Text style={styles.stepTitle}>4. Run Server</Text>
+                <Text style={styles.codeBlock}>
+                  node server.js
+                </Text>
+
+                <Text style={styles.stepText}>
+                  Once running, enter your server's IP address (starting with http:// or https://) in the Setup screen.
+                </Text>
+
+                <View style={{ height: spacing.xl }} />
+              </ScrollView>
+
+              <TouchableOpacity
+                style={styles.closeModalButton}
+                onPress={() => setShowHelp(false)}
+              >
+                <Text style={styles.buttonText}>Got it!</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -168,5 +240,71 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.buttonText,
     marginRight: spacing.sm,
+  },
+  helpButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.xl,
+    padding: spacing.sm,
+  },
+  helpButtonText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontWeight: '600',
+    marginLeft: spacing.xs,
+    textDecorationLine: 'underline',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    padding: spacing.xl,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  modalTitle: {
+    ...typography.h2,
+  },
+  modalScroll: {
+    marginBottom: spacing.xl,
+  },
+  stepTitle: {
+    ...typography.body,
+    fontWeight: 'bold',
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+    color: colors.primary,
+  },
+  stepText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+    lineHeight: 20,
+  },
+  codeBlock: {
+    backgroundColor: colors.backgroundLight,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    color: colors.text,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: 13,
+    marginBottom: spacing.md,
+  },
+  closeModalButton: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    alignItems: 'center',
   },
 });
