@@ -1,6 +1,7 @@
 // Player Screen - Video/Audio Playback
 import React, { useState, useEffect, useRef } from 'react';
 import {
+  useWindowDimensions,
   View,
   Text,
   StyleSheet,
@@ -9,7 +10,6 @@ import {
   Alert,
   Linking,
   Share,
-  Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Video, AVPlaybackStatus, ResizeMode, Audio } from 'expo-av';
@@ -22,11 +22,10 @@ import { useAuthStore } from '../../src/store/authStore';
 import { Loading } from '../../src/components/Loading';
 import { MediaJob } from '../../src/types';
 
-const { width } = Dimensions.get('window');
-
 export default function PlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const videoRef = useRef<Video>(null);
   const { authToken } = useAuthStore();
   
@@ -339,13 +338,13 @@ const styles = StyleSheet.create({
     paddingTop: 40,
   },
   videoPlayer: {
-    width: width,
-    height: width * (9 / 16), // 16:9 aspect ratio
+    width: '100%',
+    aspectRatio: 16 / 9,
     backgroundColor: '#000',
   },
   audioPlayer: {
-    width: width,
-    height: width * (9 / 16),
+    width: '100%',
+    aspectRatio: 16 / 9,
     backgroundColor: colors.backgroundLight,
     justifyContent: 'center',
     alignItems: 'center',
