@@ -6,25 +6,31 @@ import { STORAGE_KEYS } from '../utils/constants';
 interface AuthState {
   isAuthenticated: boolean;
   authToken: string | null;
+  setupComplete: boolean | null;
   isLoading: boolean;
   setAuthToken: (token: string) => Promise<void>;
   clearAuth: () => Promise<void>;
   loadAuth: () => Promise<void>;
-  checkSetupComplete: () => Promise<boolean>;
   markSetupComplete: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   authToken: null,
+  setupComplete: null,
   isLoading: true,
 
   loadAuth: async () => {
     try {
-      const token = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      const [token, setupDone] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN),
+        AsyncStorage.getItem(STORAGE_KEYS.SETUP_COMPLETE),
+      ]);
+
       set({ 
         authToken: token, 
         isAuthenticated: !!token,
+        setupComplete: setupDone === 'true',
         isLoading: false 
       });
     } catch (error) {
@@ -52,18 +58,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  checkSetupComplete: async () => {
-    try {
-      const complete = await AsyncStorage.getItem(STORAGE_KEYS.SETUP_COMPLETE);
-      return complete === 'true';
-    } catch (error) {
-      return false;
-    }
-  },
-
   markSetupComplete: async () => {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.SETUP_COMPLETE, 'true');
+      set({ setupComplete: true });
     } catch (error) {
       console.error('Failed to mark setup complete:', error);
     }

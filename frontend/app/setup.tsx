@@ -51,7 +51,10 @@ export default function SetupScreen() {
       });
 
       await markSetupComplete();
-      router.replace('/(auth)/login');
+      await setAuthToken('bypass');
+      apiService.setBaseUrl(backendUrl.trim());
+      apiService.setAuthToken('bypass');
+      router.replace('/(tabs)');
     } catch (error) {
       Alert.alert('Error', 'Failed to save settings');
     } finally {
@@ -91,6 +94,21 @@ export default function SetupScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
+          />
+          <Text style={styles.hint}>
+            This is your media server URL
+          </Text>
+
+          <Text style={[styles.label, { marginTop: spacing.lg }]}>Admin Password</Text>
+          <TextInput
+            style={styles.input}
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Enter your password"
+            placeholderTextColor={colors.textTertiary}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
           />
           <TouchableOpacity
             style={[styles.button, isLoading && styles.buttonDisabled]}
