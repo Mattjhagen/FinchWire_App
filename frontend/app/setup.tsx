@@ -37,24 +37,44 @@ export default function SetupScreen() {
 
     setIsLoading(true);
     try {
-      await saveSettings({
-        backend_url: backendUrl.trim() || DEFAULT_BACKEND_URL,
-        password: 'bypass',
-        retention_days: DEFAULT_RETENTION_DAYS,
-        wifi_only: false,
-        auto_delete: false,
-      });
-
-      await markSetupComplete();
-      await setAuthToken('bypass');
+      // Test connectivity before saving
       apiService.setBaseUrl(backendUrl.trim());
-      apiService.setAuthToken('bypass');
-      router.replace('/(tabs)');
+      const { reachable, error: connError } = await apiService.testConnection();
+
+      if (!reachable) {
+        Alert.alert(
+          'Cannot Reach Server',
+          `Failed to connect to:\n${backendUrl.trim()}\n\nReason: ${connError}\n\nCheck that:\n• The URL is correct (e.g. http://192.168.1.213:8080)\n• Your phone and server are on the same Wi-Fi\n• The server is running`,
+          [
+            { text: 'Try Anyway', onPress: () => completeSetup(backendUrl.trim()) },
+            { text: 'Go Back', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+
+      await completeSetup(backendUrl.trim());
     } catch (error) {
       Alert.alert('Error', 'Failed to save settings');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const completeSetup = async (url: string) => {
+    await saveSettings({
+      backend_url: url,
+      password: 'bypass',
+      retention_days: DEFAULT_RETENTION_DAYS,
+      wifi_only: false,
+      auto_delete: false,
+    });
+
+    await markSetupComplete();
+    await setAuthToken('bypass');
+    apiService.setBaseUrl(url);
+    apiService.setAuthToken('bypass');
+    router.replace('/(tabs)');
   };
 
   return (

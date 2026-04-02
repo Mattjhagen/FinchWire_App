@@ -18,6 +18,24 @@ class ApiService {
     this.authToken = token;
   }
 
+  async testConnection(): Promise<{ reachable: boolean; error?: string }> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch(`${this.baseUrl}/health`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return { reachable: response.ok || response.status < 500 };
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        return { reachable: false, error: 'Timed out — server not responding' };
+      }
+      return { reachable: false, error: error.message || 'Network request failed' };
+    }
+  }
+
   private getHeaders(skipToken: boolean = false): HeadersInit {
     return {
       'Content-Type': 'application/json',
@@ -27,17 +45,22 @@ class ApiService {
 
   private async request<T>(endpoint: string, options?: RequestInit, skipToken: boolean = false): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    
+
     console.log('API Request:', url, options?.method || 'GET');
-    
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
       const response = await fetch(url, {
         ...options,
+        signal: controller.signal,
         headers: {
           ...this.getHeaders(skipToken),
           ...options?.headers,
         },
       });
+      clearTimeout(timeoutId);
 
       console.log('API Response status:', response.status);
 
@@ -51,9 +74,13 @@ class ApiService {
       console.log('API Response data:', data);
       return data;
     } catch (error: any) {
+      clearTimeout(timeoutId);
       console.error('API Request failed:', error);
+      if (error.name === 'AbortError') {
+        throw new Error('Connection timed out. Server is not responding at ' + this.baseUrl);
+      }
       if (error.message.includes('Network request failed') || error.message.includes('Failed to fetch')) {
-        throw new Error('Cannot connect to server. Please check your internet connection and backend URL.');
+        throw new Error('Cannot connect to server. Check that the URL is correct and the server is running.');
       }
       throw error;
     }

@@ -24,10 +24,12 @@ export default function HomeScreen() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { data: mediaList, isLoading, refetch, isRefetching } = useQuery({
+  const { data: mediaList, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ['media'],
     queryFn: () => apiService.getMediaList(),
-    refetchInterval: 5000, // Auto-refresh every 5 seconds
+    refetchInterval: 5000,
+    retry: 1,
+    retryDelay: 3000,
   });
 
   const filteredMedia = React.useMemo(() => {
@@ -92,6 +94,16 @@ export default function HomeScreen() {
 
   if (isLoading) {
     return <Loading message="Loading library..." />;
+  }
+
+  if (error) {
+    return (
+      <EmptyState
+        icon="cloud-offline-outline"
+        title="Cannot reach server"
+        message={(error as Error).message}
+      />
+    );
   }
 
   return (
