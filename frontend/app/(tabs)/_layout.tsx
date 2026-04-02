@@ -36,9 +36,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Library',
+          title: 'Home',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="play-circle" size={size} color={color} />
+            <Ionicons name="home" size={size} color={color} />
           ),
         }}
       />
