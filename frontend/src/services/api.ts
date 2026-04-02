@@ -130,8 +130,9 @@ class ApiService {
 
   // Build media URLs
   getMediaUrl(filename: string, download: boolean = false): string {
-    const encodedFilename = encodeURIComponent(filename);
-    return `${this.baseUrl}/media/${encodedFilename}${download ? '?download=true' : ''}`;
+    // Only encode segments, not the whole path to preserve slashes
+    const encodedPath = filename.split('/').map(segment => encodeURIComponent(segment)).join('/');
+    return `${this.baseUrl}/media/${encodedPath}${download ? '?download=true' : ''}`;
   }
 
   getVlcUrl(filename: string): string {
