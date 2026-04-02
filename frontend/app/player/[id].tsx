@@ -132,15 +132,30 @@ export default function PlayerScreen() {
       setDuration(sourceDuration * 1000);
     });
 
+    const statusSubscription = player.addListener('statusChange', ({ status }) => {
+      if (status === 'readyToPlay' && player.duration > 0) {
+        setDuration(player.duration * 1000);
+      }
+    });
+
     const timeUpdateSubscription = player.addListener('timeUpdate', ({ currentTime }) => {
       if (!isScrubbing) {
         setPosition(currentTime * 1000);
+      }
+
+      // Some sources publish duration late; keep duration in sync when it becomes available.
+      if (player.duration > 0) {
+        setDuration((prevDuration) => {
+          const nextDuration = player.duration * 1000;
+          return Math.abs(prevDuration - nextDuration) > 250 ? nextDuration : prevDuration;
+        });
       }
     });
 
     return () => {
       playingSubscription.remove();
       sourceLoadSubscription.remove();
+      statusSubscription.remove();
       timeUpdateSubscription.remove();
     };
   }, [isScrubbing, player]);
