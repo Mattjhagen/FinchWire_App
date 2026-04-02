@@ -17,8 +17,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "edgeToEdgeEnabled": true,
-      "usesCleartextTraffic": true
+      "edgeToEdgeEnabled": true
     },
     "web": {
       "bundler": "metro",
@@ -58,14 +57,14 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "b493007f-b040-40a1-88e7-fb5cdba80233"
+        "projectId": "6a981733-6ad4-4906-bb8d-06680457da36"
       }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/b493007f-b040-40a1-88e7-fb5cdba80233"
+      "url": "https://u.expo.dev/6a981733-6ad4-4906-bb8d-06680457da36"
     }
   }
 }
