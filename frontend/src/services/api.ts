@@ -1,10 +1,12 @@
 // API Service for FinchWire
 import { API_ENDPOINTS } from '../utils/constants';
 import { MediaJob, DownloadJobRequest, AuthResponse, SessionResponse } from '../types';
+import { Platform } from 'react-native';
 
 class ApiService {
   private baseUrl: string = '';
   private authToken: string = '';
+  private authMode: 'token' | 'session' | null = null;
 
   setBaseUrl(url: string) {
     let formattedUrl = url.trim().replace(/\/$/, '');
@@ -15,7 +17,20 @@ class ApiService {
   }
 
   setAuthToken(token: string) {
+    if (!token) {
+      this.authToken = '';
+      this.authMode = null;
+      return;
+    }
+
+    if (token.startsWith('session:')) {
+      this.authToken = token.slice('session:'.length);
+      this.authMode = 'session';
+      return;
+    }
+
     this.authToken = token;
+    this.authMode = 'token';
   }
 
   async testConnection(): Promise<{ reachable: boolean; error?: string }> {
@@ -37,13 +52,37 @@ class ApiService {
   }
 
   private getHeaders(skipToken: boolean = false): HeadersInit {
-    return {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...((this.authToken && !skipToken) ? { 
-        'Authorization': `Bearer ${this.authToken}`,
-        'x-finchwire-token': this.authToken 
-      } : {}),
     };
+
+    if (!skipToken && this.authToken && this.authMode === 'token') {
+      headers.Authorization = `Bearer ${this.authToken}`;
+      headers['x-finchwire-token'] = this.authToken;
+    }
+
+    // Session-auth backend compatibility (YT-Download Express server).
+    if (!skipToken && this.authToken && this.authMode === 'session' && Platform.OS !== 'web') {
+      headers.Cookie = `session=${encodeURIComponent(this.authToken)}`;
+    }
+
+    return headers;
+  }
+
+  getMediaRequestHeaders(): Record<string, string> | undefined {
+    if (!this.authToken || !this.authMode) {
+      return undefined;
+    }
+
+    if (this.authMode === 'token') {
+      return { 'x-finchwire-token': this.authToken };
+    }
+
+    if (Platform.OS !== 'web') {
+      return { Cookie: `session=${encodeURIComponent(this.authToken)}` };
+    }
+
+    return undefined;
   }
 
   private async request<T>(endpoint: string, options?: RequestInit, skipToken: boolean = false): Promise<T> {
@@ -58,6 +97,7 @@ class ApiService {
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
+        credentials: 'include',
         headers: {
           ...this.getHeaders(skipToken),
           ...options?.headers,
@@ -96,8 +136,30 @@ class ApiService {
       body: JSON.stringify({ username, password }),
     }, true);
     
+    // Token mode (FastAPI backend)
     if (response.success && response.token) {
       this.setAuthToken(response.token);
+      return response;
+    }
+
+    // Session-cookie mode (YT-Download Express backend)
+    if (response.success && !response.token) {
+      const sessionToken = `session:${password}`;
+      this.setAuthToken(sessionToken);
+
+      // Some backends may return { success: true } even with a bad password.
+      // Verify the established session before marking login as successful.
+      try {
+        const session = await this.request<SessionResponse>(API_ENDPOINTS.SESSION);
+        if (session.authenticated) {
+          return { ...response, token: sessionToken };
+        }
+      } catch {
+        // Fall through to standardized login error below.
+      }
+
+      this.setAuthToken('');
+      return { success: false, error: 'Invalid password' };
     }
     
     return response;
@@ -152,7 +214,7 @@ class ApiService {
   // Build authenticated media URL with token
   getAuthenticatedMediaUrl(filename: string): string {
     const url = this.getMediaUrl(filename);
-    if (this.authToken) {
+    if (this.authToken && this.authMode === 'token') {
       const separator = url.includes('?') ? '&' : '?';
       return `${url}${separator}token=${encodeURIComponent(this.authToken)}`;
     }

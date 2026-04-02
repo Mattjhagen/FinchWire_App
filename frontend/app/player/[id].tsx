@@ -108,6 +108,7 @@ export default function PlayerScreen() {
 
     setIsDownloading(true);
     try {
+      const mediaHeaders = apiService.getMediaRequestHeaders();
       const mediaUrl = apiService.getAuthenticatedMediaUrl(
         media.relative_path || media.safe_filename
       );
@@ -116,7 +117,7 @@ export default function PlayerScreen() {
         media.id,
         mediaUrl,
         media.safe_filename,
-        authToken,
+        mediaHeaders,
         (progress) => setDownloadProgress(progress)
       );
 
@@ -213,6 +214,7 @@ export default function PlayerScreen() {
   const playbackUrl = localPath || apiService.getAuthenticatedMediaUrl(
     media.relative_path || media.safe_filename
   );
+  const mediaHeaders = authToken ? apiService.getMediaRequestHeaders() : undefined;
 
   return (
     <View style={styles.container}>
@@ -230,7 +232,7 @@ export default function PlayerScreen() {
               ref={videoRef}
               source={{ 
                 uri: playbackUrl,
-                headers: authToken ? { 'x-finchwire-token': authToken } : undefined
+                headers: mediaHeaders
               }}
               onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
               shouldPlay={false}
@@ -242,7 +244,7 @@ export default function PlayerScreen() {
             ref={videoRef}
             source={{ 
               uri: playbackUrl,
-              headers: authToken ? { 'x-finchwire-token': authToken } : undefined
+              headers: mediaHeaders
             }}
             style={styles.videoPlayer}
             resizeMode={ResizeMode.CONTAIN}

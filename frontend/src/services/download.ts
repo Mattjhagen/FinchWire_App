@@ -1,6 +1,5 @@
 // Download Service for local file management
 import * as FileSystem from 'expo-file-system';
-import { LocalMedia } from '../types';
 
 class DownloadService {
   private downloadsDir: string;
@@ -22,7 +21,7 @@ class DownloadService {
     mediaId: string,
     mediaUrl: string,
     filename: string,
-    authToken: string,
+    requestHeaders?: Record<string, string>,
     onProgress?: (progress: number) => void
   ): Promise<string> {
     await this.ensureDownloadDirectory();
@@ -32,11 +31,7 @@ class DownloadService {
     const downloadResumable = FileSystem.createDownloadResumable(
       mediaUrl,
       localPath,
-      {
-        headers: {
-          'x-finchwire-token': authToken,
-        },
-      },
+      requestHeaders ? { headers: requestHeaders } : undefined,
       (downloadProgress) => {
         const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
         onProgress?.(progress * 100);
