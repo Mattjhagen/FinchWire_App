@@ -11,6 +11,12 @@ from datetime import datetime
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
+import json
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from fastapi.responses import FileResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Query
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -28,16 +34,67 @@ if mongo_url:
     except Exception as e:
         print(f"Failed to connect to MongoDB: {e}")
 else:
-    print("No MONGO_URL found, using in-memory storage.")
+    print("No MONGO_URL found, using in-memory storage for downloads.")
 
-# Create the main app
-app = FastAPI(title="FinchWire Media Server")
+# --- Auth Configuration ---
+SECRET_KEY = os.environ.get("SECRET_KEY", "super-secret-finchwire-key-change-me")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 week
 
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer()
 
-def datetime_utcnow():
-    return datetime.utcnow()
+USERS_FILE = ROOT_DIR / "users.json"
+
+def get_users():
+    if USERS_FILE.exists():
+        try:
+            with open(USERS_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_users(users):
+    with open(USERS_FILE, "w") as f:
+        json.dump(users, f, indent=2)
+
+# Ensure at least one admin user exists
+def ensure_admin_user():
+    users = get_users()
+    if not users:
+        hashed_password = pwd_context.hash("admin123")
+        users["admin"] = {
+            "username": "admin",
+            "password": hashed_password,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        save_users(users)
+        print("Created default admin user: admin / admin123")
+
+ensure_admin_user()
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def verify_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload.get("sub")
+    except JWTError:
+        return None
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    username = verify_token(token)
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return username
 
 # --- Models ---
 
@@ -50,14 +107,17 @@ class StatusCheckCreate(BaseModel):
     client_name: str
 
 class LoginRequest(BaseModel):
+    username: str = "admin"
     password: str
 
 class AuthResponse(BaseModel):
     success: bool = True
-    token: str = "bypass"
+    token: Optional[str] = None
+    error: Optional[str] = None
 
 class SessionResponse(BaseModel):
-    authenticated: bool = True
+    authenticated: bool
+    username: Optional[str] = None
 
 class MediaJob(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -122,24 +182,36 @@ async def root():
 # Auth
 @api_router.post("/login", response_model=AuthResponse)
 async def login(req: LoginRequest):
-    # Accept any password for mock but typically check against env
-    return AuthResponse()
+    users = get_users()
+    user = users.get(req.username)
+    
+    if not user or not pwd_context.verify(req.password, user["password"]):
+        return AuthResponse(success=False, error="Invalid username or password")
+    
+    token = create_access_token(data={"sub": req.username})
+    return AuthResponse(success=True, token=token)
 
 @api_router.post("/logout")
 async def logout():
     return {"success": True}
 
 @api_router.get("/session", response_model=SessionResponse)
-async def session():
-    return SessionResponse()
+async def session(token: Optional[str] = Query(None)):
+    if not token:
+        return SessionResponse(authenticated=False)
+    
+    username = verify_token(token)
+    if username:
+        return SessionResponse(authenticated=True, username=username)
+    return SessionResponse(authenticated=False)
 
 # Downloads
 @api_router.get("/downloads", response_model=List[MediaJob])
-async def get_downloads():
+async def get_downloads(user: str = Depends(get_current_user)):
     return await get_all_jobs()
 
 @api_router.post("/downloads", response_model=MediaJob)
-async def submit_download(req: DownloadRequest):
+async def submit_download(req: DownloadRequest, user: str = Depends(get_current_user)):
     new_job = MediaJob(
         url=req.url,
         original_url=req.url,
@@ -155,25 +227,25 @@ async def submit_download(req: DownloadRequest):
     return new_job
 
 @api_router.delete("/downloads/{job_id}")
-async def delete_download(job_id: str):
+async def delete_download(job_id: str, user: str = Depends(get_current_user)):
     await delete_job_by_id(job_id)
     return {"success": True}
 
 @api_router.post("/downloads/{job_id}/retry")
-async def retry_download(job_id: str):
+async def retry_download(job_id: str, user: str = Depends(get_current_user)):
     await update_job_by_id(job_id, {"status": "queued", "progress_percent": 0, "error_message": None})
     return {"success": True}
 
 # Status
 @api_router.get("/status")
-async def get_status_checks():
+async def get_status_checks(user: str = Depends(get_current_user)):
     if db:
         checks = await db.status_checks.find().to_list(1000)
         return checks
     return []
 
 @api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
+async def create_status_check(input: StatusCheckCreate, user: str = Depends(get_current_user)):
     check = StatusCheck(client_name=input.client_name)
     if db:
         await db.status_checks.insert_one(check.dict())
@@ -186,8 +258,18 @@ MEDIA_DIR.mkdir(exist_ok=True)
 # Include the router in the main app
 app.include_router(api_router)
 
-# Mount media directory for static file access
-app.mount("/media", StaticFiles(directory=str(MEDIA_DIR)), name="media")
+# Protected media serving
+@app.get("/media/{file_path:path}")
+async def serve_media(file_path: str, token: Optional[str] = Query(None)):
+    # Check token from query param (for video players that don't support headers)
+    if not token or not verify_token(token):
+        raise HTTPException(status_code=401, detail="Unauthorized - valid token required in query string")
+    
+    full_path = MEDIA_DIR / file_path
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return FileResponse(full_path)
 
 # Add middleware
 app.add_middleware(

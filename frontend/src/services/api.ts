@@ -87,11 +87,17 @@ class ApiService {
   }
 
   // Auth endpoints
-  async login(password: string): Promise<AuthResponse> {
-    return this.request<AuthResponse>(API_ENDPOINTS.LOGIN, {
+  async login(password: string, username: string = 'admin'): Promise<AuthResponse> {
+    const response = await this.request<AuthResponse>(API_ENDPOINTS.LOGIN, {
       method: 'POST',
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username, password }),
     }, true);
+    
+    if (response.success && response.token) {
+      this.setAuthToken(response.token);
+    }
+    
+    return response;
   }
 
   async logout(): Promise<{ success: boolean }> {
@@ -142,7 +148,12 @@ class ApiService {
 
   // Build authenticated media URL with token
   getAuthenticatedMediaUrl(filename: string): string {
-    return this.getMediaUrl(filename);
+    const url = this.getMediaUrl(filename);
+    if (this.authToken) {
+      const separator = url.includes('?') ? '&' : '?';
+      return `${url}${separator}token=${encodeURIComponent(this.authToken)}`;
+    }
+    return url;
   }
 }
 

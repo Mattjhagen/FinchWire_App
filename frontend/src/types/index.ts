@@ -60,9 +60,16 @@ export interface AppSettings {
 
 export interface AuthResponse {
   success: boolean;
+  token?: string;
   error?: string;
+}
+
+export interface LoginRequest {
+  username?: string;
+  password: string;
 }
 
 export interface SessionResponse {
   authenticated: boolean;
+  username?: string;
 }
