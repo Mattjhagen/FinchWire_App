@@ -64,17 +64,15 @@ export default function SetupScreen() {
   const completeSetup = async (url: string) => {
     await saveSettings({
       backend_url: url,
-      password: 'bypass',
+      password: '',
       retention_days: DEFAULT_RETENTION_DAYS,
       wifi_only: false,
       auto_delete: false,
     });
 
     await markSetupComplete();
-    await setAuthToken('bypass');
     apiService.setBaseUrl(url);
-    apiService.setAuthToken('bypass');
-    router.replace('/(tabs)');
+    router.replace('/(auth)/login');
   };
 
   return (
