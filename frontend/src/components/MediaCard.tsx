@@ -106,6 +106,14 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, onPress, onLongPres
           <Text style={[styles.status, { color: getStatusColor(media.status) }]}>
             {media.status.charAt(0).toUpperCase() + media.status.slice(1)}
           </Text>
+
+          {(media.keep_forever === 1 || media.keep_forever === true) && (
+            <>
+              <Text style={styles.separator}>•</Text>
+              <Ionicons name="bookmark" size={14} color={colors.warning} />
+              <Text style={[styles.fileSize, { marginLeft: 4, color: colors.warning }]}>Kept</Text>
+            </>
+          )}
           
           {media.file_size > 0 && (
             <>

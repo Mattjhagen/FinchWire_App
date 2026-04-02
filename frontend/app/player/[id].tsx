@@ -41,6 +41,8 @@ export default function PlayerScreen() {
   const [scrubPosition, setScrubPosition] = useState<number | null>(null);
   const [isPiPSupported, setIsPiPSupported] = useState(false);
   const [isPiPActive, setIsPiPActive] = useState(false);
+  const [isUpdatingKeep, setIsUpdatingKeep] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const mediaHeaders = useMemo(() => {
     if (!media || localPath || !authToken) {
@@ -295,6 +297,64 @@ export default function PlayerScreen() {
     }
   };
 
+  const handleToggleKeepDownload = async () => {
+    if (!media || isUpdatingKeep) return;
+
+    const currentlyKept = media.keep_forever === true || media.keep_forever === 1;
+    const nextKept = !currentlyKept;
+
+    setIsUpdatingKeep(true);
+    try {
+      await apiService.setKeepDownload(media.id, nextKept);
+      setMedia((prev) => (prev ? { ...prev, keep_forever: nextKept ? 1 : 0 } : prev));
+      Alert.alert(
+        nextKept ? 'Keep Download Enabled' : 'Auto-Delete Enabled',
+        nextKept
+          ? 'This media will be excluded from 30-day auto-delete.'
+          : 'This media can be auto-deleted after 30 days based on retention rules.'
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Failed to update keep setting');
+    } finally {
+      setIsUpdatingKeep(false);
+    }
+  };
+
+  const handleDeleteFromServer = () => {
+    if (!media || isDeleting) return;
+
+    Alert.alert(
+      'Delete from Server?',
+      'This will permanently remove the media file from your server.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (!media) return;
+            setIsDeleting(true);
+            try {
+              await apiService.deleteJob(media.id);
+
+              const localMedia = await storageService.getLocalMedia(media.id);
+              if (localMedia) {
+                await storageService.deleteLocalMedia(localMedia.id);
+              }
+
+              Alert.alert('Deleted', 'Media deleted from server.');
+              router.back();
+            } catch (error: any) {
+              Alert.alert('Error', error?.message || 'Failed to delete media');
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const formatTime = (millis: number): string => {
     const totalSeconds = Math.floor(millis / 1000);
     const hours = Math.floor(totalSeconds / 3600);
@@ -327,6 +387,7 @@ export default function PlayerScreen() {
     );
   }
   const displayPosition = isScrubbing && scrubPosition !== null ? scrubPosition : position;
+  const isKeptDownload = media.keep_forever === true || media.keep_forever === 1;
 
   return (
     <View style={styles.container}>
@@ -466,6 +527,38 @@ export default function PlayerScreen() {
           <TouchableOpacity style={styles.actionButtonSecondary} onPress={handleShare}>
             <Ionicons name="share-outline" size={24} color={colors.text} />
             <Text style={styles.actionButtonTextSecondary}>Share</Text>
+          </TouchableOpacity>
+
+          {/* Keep / Unkeep for retention */}
+          <TouchableOpacity
+            style={styles.actionButtonSecondary}
+            onPress={handleToggleKeepDownload}
+            disabled={isUpdatingKeep}
+          >
+            <Ionicons
+              name={isKeptDownload ? 'bookmark' : 'bookmark-outline'}
+              size={24}
+              color={colors.text}
+            />
+            <Text style={styles.actionButtonTextSecondary}>
+              {isUpdatingKeep
+                ? 'Updating...'
+                : isKeptDownload
+                  ? 'Allow Auto-Delete'
+                  : 'Keep Download'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Delete */}
+          <TouchableOpacity
+            style={styles.actionButtonDanger}
+            onPress={handleDeleteFromServer}
+            disabled={isDeleting}
+          >
+            <Ionicons name="trash-outline" size={24} color={colors.error} />
+            <Text style={styles.actionButtonTextDanger}>
+              {isDeleting ? 'Deleting...' : 'Delete from Server'}
+            </Text>
           </TouchableOpacity>
 
           {!media.is_audio && (
@@ -619,6 +712,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  actionButtonDanger: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.error,
+  },
   actionButtonText: {
     ...typography.body,
     fontWeight: '600',
@@ -629,6 +732,12 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontWeight: '600',
     color: colors.text,
+    marginLeft: spacing.sm,
+  },
+  actionButtonTextDanger: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.error,
     marginLeft: spacing.sm,
   },
   downloadedBadge: {

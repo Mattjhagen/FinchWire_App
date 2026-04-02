@@ -14,6 +14,7 @@ export const API_ENDPOINTS = {
   LOGOUT: '/api/logout',
   SESSION: '/api/session',
   DOWNLOADS: '/api/downloads',
+  DOWNLOAD_KEEP: '/api/downloads',
   FILES: '/api/files',
   EVENTS: '/api/events',
 };

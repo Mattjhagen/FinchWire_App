@@ -22,6 +22,7 @@ export interface MediaJob {
   width?: number;
   height?: number;
   is_audio: boolean;
+  keep_forever?: number | boolean;
   last_viewed_at?: string;
   view_count: number;
   deleted_at?: string;

@@ -204,6 +204,13 @@ class ApiService {
     });
   }
 
+  async setKeepDownload(id: string, keepForever: boolean): Promise<{ success: boolean; job?: MediaJob }> {
+    return this.request<{ success: boolean; job?: MediaJob }>(`${API_ENDPOINTS.DOWNLOADS}/${id}/keep`, {
+      method: 'PATCH',
+      body: JSON.stringify({ keep_forever: keepForever }),
+    });
+  }
+
   // Build media URLs
   getMediaUrl(filename: string, download: boolean = false): string {
     // Only encode segments, not the whole path to preserve slashes
