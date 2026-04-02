@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, borderRadius } from '../../src/utils/theme';
 import { useAuthStore } from '../../src/store/authStore';
@@ -19,6 +20,7 @@ import { apiService } from '../../src/services/api';
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { clearAuth } = useAuthStore();
   const { settings, saveSettings } = useSettingsStore();
   const [isEditingUrl, setIsEditingUrl] = React.useState(false);
@@ -26,9 +28,12 @@ export default function SettingsScreen() {
 
   const handleSaveUrl = async () => {
     if (settings && tempUrl.trim()) {
-      await saveSettings({ ...settings, backend_url: tempUrl.trim() });
+      const trimmedUrl = tempUrl.trim();
+      await saveSettings({ ...settings, backend_url: trimmedUrl });
+      apiService.setBaseUrl(trimmedUrl);
+      queryClient.invalidateQueries({ queryKey: ['media'] });
       setIsEditingUrl(false);
-      Alert.alert('Success', 'Backend URL updated! Please restart the app if it doesn\'t refresh.');
+      Alert.alert('Success', 'Backend URL updated');
     }
   };
 

@@ -64,7 +64,8 @@ export default function AddScreen() {
       }
     } catch (error) {
       console.error('Download error:', error);
-      Alert.alert('Error', 'Failed to connect to server. Ensure your backend is running.');
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      Alert.alert('Download Failed', message);
     } finally {
       setIsLoading(false);
     }

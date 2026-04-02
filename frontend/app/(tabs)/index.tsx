@@ -27,7 +27,7 @@ export default function HomeScreen() {
   const { data: mediaList, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ['media'],
     queryFn: () => apiService.getMediaList(),
-    refetchInterval: 5000,
+    refetchInterval: (query) => query.state.status === 'error' ? false : 5000,
     retry: 1,
     retryDelay: 3000,
   });

@@ -106,7 +106,17 @@ class ApiService {
 
   // Media endpoints
   async getMediaList(): Promise<MediaJob[]> {
-    return this.request<MediaJob[]>(API_ENDPOINTS.DOWNLOADS);
+    const data = await this.request<unknown>(API_ENDPOINTS.DOWNLOADS);
+    // Server may return a plain array OR a wrapped object like { jobs: [] }
+    if (Array.isArray(data)) return data as MediaJob[];
+    if (data && typeof data === 'object') {
+      for (const key of ['jobs', 'downloads', 'data', 'items', 'results']) {
+        const val = (data as Record<string, unknown>)[key];
+        if (Array.isArray(val)) return val as MediaJob[];
+      }
+    }
+    console.warn('getMediaList: unexpected response shape', data);
+    return [];
   }
 
   async submitDownload(data: DownloadJobRequest): Promise<MediaJob> {
