@@ -44,7 +44,7 @@ export default function SetupScreen() {
       if (!reachable) {
         Alert.alert(
           'Cannot Reach Server',
-          `Failed to connect to:\n${backendUrl.trim()}\n\nReason: ${connError}\n\nCheck that:\n• The URL is correct (e.g. http://192.168.1.213:8080)\n• Your phone and server are on the same Wi-Fi\n• The server is running`,
+          `Failed to connect to:\n${backendUrl.trim()}\n\nReason: ${connError}\n\nCheck that:\n• The URL is correct (e.g. https://media.p3lending.space or http://192.168.1.213:8080)\n• Your phone and server are on the same Wi-Fi (if using local IP)\n• The server is running`,
           [
             { text: 'Try Anyway', onPress: () => completeSetup(backendUrl.trim()) },
             { text: 'Go Back', style: 'cancel' },
@@ -102,7 +102,7 @@ export default function SetupScreen() {
             style={styles.input}
             value={backendUrl}
             onChangeText={setBackendUrl}
-            placeholder="https://yt.finchwire.site"
+            placeholder="https://media.p3lending.space"
             placeholderTextColor={colors.textTertiary}
             autoCapitalize="none"
             autoCorrect={false}

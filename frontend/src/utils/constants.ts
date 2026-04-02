@@ -1,6 +1,6 @@
 // FinchWire Constants
 
-export const DEFAULT_BACKEND_URL = 'http://localhost:8000';
+export const DEFAULT_BACKEND_URL = 'https://media.p3lending.space';
 export const DEFAULT_RETENTION_DAYS = 30;
 
 export const STORAGE_KEYS = {
