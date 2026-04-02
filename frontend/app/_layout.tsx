@@ -14,7 +14,7 @@ const queryClient = new QueryClient();
 function RootLayoutNav() {
   const router = useRouter();
   const segments = useSegments();
-  const { isAuthenticated, isLoading, loadAuth, setupComplete, markSetupComplete } = useAuthStore();
+  const { isAuthenticated, authToken, isLoading, loadAuth, setupComplete, markSetupComplete } = useAuthStore();
   const { settings, loadSettings } = useSettingsStore();
 
   // Initialize stores and services
@@ -33,15 +33,17 @@ function RootLayoutNav() {
     init();
   }, []);
 
-  // Configure API service when settings change
+  // Configure API service when settings or auth changes
   useEffect(() => {
     if (settings) {
       apiService.setBaseUrl(settings.backend_url);
-      if (settings.password) {
-        apiService.setAuthToken(settings.password);
-      }
     }
-  }, [settings]);
+    if (authToken) {
+      apiService.setAuthToken(authToken);
+    } else {
+      apiService.setAuthToken('');
+    }
+  }, [settings, authToken]);
 
   // Handle navigation based on auth state
   useEffect(() => {

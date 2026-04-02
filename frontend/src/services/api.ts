@@ -39,7 +39,10 @@ class ApiService {
   private getHeaders(skipToken: boolean = false): HeadersInit {
     return {
       'Content-Type': 'application/json',
-      ...((this.authToken && !skipToken) ? { 'x-finchwire-token': this.authToken } : {}),
+      ...((this.authToken && !skipToken) ? { 
+        'Authorization': `Bearer ${this.authToken}`,
+        'x-finchwire-token': this.authToken 
+      } : {}),
     };
   }
 

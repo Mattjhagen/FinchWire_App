@@ -16,7 +16,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi import Query
+from fastapi import Query, Header
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -62,15 +62,18 @@ def save_users(users):
 # Ensure at least one admin user exists
 def ensure_admin_user():
     users = get_users()
-    if not users:
-        hashed_password = pwd_context.hash("admin123")
+    admin_pass = os.environ.get("FINCHWIRE_ADMIN_PASSWORD", "admin123")
+    hashed_password = pwd_context.hash(admin_pass)
+    
+    if "admin" not in users or not pwd_context.verify(admin_pass, users["admin"]["password"]):
         users["admin"] = {
             "username": "admin",
             "password": hashed_password,
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
         }
         save_users(users)
-        print("Created default admin user: admin / admin123")
+        print(f"Updated/Created admin user. Default password is: {admin_pass}")
 
 ensure_admin_user()
 
@@ -85,9 +88,21 @@ def verify_token(token: str):
     except JWTError:
         return None
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    token = credentials.credentials
-    username = verify_token(token)
+async def get_current_user(
+    token: Optional[str] = Query(None),
+    x_token: Optional[str] = Header(None, alias="x-finchwire-token"),
+    auth: Optional[HTTPAuthorizationCredentials] = Depends(security)
+):
+    actual_token = None
+    if auth and auth.credentials:
+        actual_token = auth.credentials
+    elif x_token:
+        actual_token = x_token
+    elif token:
+        actual_token = token
+        
+    username = verify_token(actual_token) if actual_token else None
+    
     if not username:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -260,10 +275,16 @@ app.include_router(api_router)
 
 # Protected media serving
 @app.get("/media/{file_path:path}")
-async def serve_media(file_path: str, token: Optional[str] = Query(None)):
-    # Check token from query param (for video players that don't support headers)
-    if not token or not verify_token(token):
-        raise HTTPException(status_code=401, detail="Unauthorized - valid token required in query string")
+async def serve_media(
+    file_path: str, 
+    token: Optional[str] = Query(None),
+    x_token: Optional[str] = Header(None, alias="x-finchwire-token")
+):
+    # Check token from query param or header
+    actual_token = token or x_token
+    
+    if not actual_token or not verify_token(actual_token):
+        raise HTTPException(status_code=401, detail="Unauthorized - valid token required")
     
     full_path = MEDIA_DIR / file_path
     if not full_path.exists():
