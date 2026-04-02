@@ -7,7 +7,11 @@ class ApiService {
   private authToken: string = '';
 
   setBaseUrl(url: string) {
-    this.baseUrl = url.replace(/\/$/, '');
+    let formattedUrl = url.trim().replace(/\/$/, '');
+    if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+      formattedUrl = `http://${formattedUrl}`;
+    }
+    this.baseUrl = formattedUrl;
   }
 
   setAuthToken(token: string) {
