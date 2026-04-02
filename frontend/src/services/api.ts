@@ -8,6 +8,11 @@ class ApiService {
   private authToken: string = '';
   private authMode: 'token' | 'session' | null = null;
 
+  private withTokenQuery(url: string, token: string): string {
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}token=${encodeURIComponent(token)}`;
+  }
+
   setBaseUrl(url: string) {
     let formattedUrl = url.trim().replace(/\/$/, '');
     if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
@@ -207,16 +212,25 @@ class ApiService {
   }
 
   getVlcUrl(filename: string): string {
-    const mediaUrl = this.getMediaUrl(filename);
+    const mediaUrl = this.getExternalMediaUrl(filename);
     return `vlc://${mediaUrl}`;
+  }
+
+  // Build media URL for external players (e.g., VLC).
+  // External players cannot send cookie auth, so we include token query when available.
+  getExternalMediaUrl(filename: string): string {
+    const url = this.getMediaUrl(filename);
+    if (this.authToken) {
+      return this.withTokenQuery(url, this.authToken);
+    }
+    return url;
   }
 
   // Build authenticated media URL with token
   getAuthenticatedMediaUrl(filename: string): string {
     const url = this.getMediaUrl(filename);
     if (this.authToken && this.authMode === 'token') {
-      const separator = url.includes('?') ? '&' : '?';
-      return `${url}${separator}token=${encodeURIComponent(this.authToken)}`;
+      return this.withTokenQuery(url, this.authToken);
     }
     return url;
   }
