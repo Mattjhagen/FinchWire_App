@@ -1,7 +1,6 @@
 // Player Screen - Video/Audio Playback
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  useWindowDimensions,
   View,
   Text,
   StyleSheet,
@@ -12,7 +11,9 @@ import {
   Share,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Video, AVPlaybackStatus, ResizeMode, Audio } from 'expo-av';
+import Slider from '@react-native-community/slider';
+import { Audio } from 'expo-av';
+import { isPictureInPictureSupported, useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, borderRadius } from '../../src/utils/theme';
 import { apiService } from '../../src/services/api';
@@ -25,8 +26,7 @@ import { MediaJob } from '../../src/types';
 export default function PlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { width } = useWindowDimensions();
-  const videoRef = useRef<Video>(null);
+  const videoViewRef = useRef<VideoView>(null);
   const { authToken } = useAuthStore();
   
   const [media, setMedia] = useState<MediaJob | null>(null);
@@ -37,32 +37,43 @@ export default function PlayerScreen() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [localPath, setLocalPath] = useState<string | null>(null);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [scrubPosition, setScrubPosition] = useState<number | null>(null);
+  const [isPiPSupported, setIsPiPSupported] = useState(false);
+  const [isPiPActive, setIsPiPActive] = useState(false);
 
-  useEffect(() => {
-    loadMedia();
-    setupAudio();
-    
-    return () => {
-      // Cleanup audio session
-      Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-      });
+  const mediaHeaders = useMemo(() => {
+    if (!media || localPath || !authToken) {
+      return undefined;
+    }
+    return apiService.getMediaRequestHeaders();
+  }, [authToken, localPath, media]);
+
+  const playbackUrl = media
+    ? localPath || apiService.getAuthenticatedMediaUrl(media.relative_path || media.safe_filename)
+    : null;
+
+  const videoSource = useMemo(() => {
+    if (!playbackUrl) {
+      return null;
+    }
+    if (mediaHeaders) {
+      return {
+        uri: playbackUrl,
+        headers: mediaHeaders,
+      };
+    }
+    return {
+      uri: playbackUrl,
     };
-  }, [id]);
+  }, [mediaHeaders, playbackUrl]);
 
-  const setupAudio = async () => {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: true,
-      shouldDuckAndroid: true,
-    });
-  };
+  const player = useVideoPlayer(videoSource, (createdPlayer) => {
+    createdPlayer.timeUpdateEventInterval = 0.25;
+    createdPlayer.staysActiveInBackground = true;
+  });
 
-  const loadMedia = async () => {
+  const loadMedia = useCallback(async () => {
     let resolvedMedia: MediaJob | null = null;
 
     try {
@@ -83,34 +94,115 @@ export default function PlayerScreen() {
           console.warn('Failed to load local media metadata:', storageError);
         }
       }
-    } catch (error) {
+    } catch {
       if (!resolvedMedia) {
         Alert.alert('Error', 'Failed to load media');
       }
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [id]);
 
-  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (status.isLoaded) {
-      setIsPlaying(status.isPlaying);
-      setPosition(status.positionMillis);
-      if (status.durationMillis) {
-        setDuration(status.durationMillis);
+  useEffect(() => {
+    loadMedia();
+    setupAudio();
+    setIsPiPSupported(isPictureInPictureSupported());
+    
+    return () => {
+      // Cleanup audio session
+      Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
+    };
+  }, [id, loadMedia]);
+
+  useEffect(() => {
+    setIsPlaying(player.playing);
+    setPosition(player.currentTime * 1000);
+    setDuration(player.duration * 1000);
+
+    const playingSubscription = player.addListener('playingChange', ({ isPlaying: nextIsPlaying }) => {
+      setIsPlaying(nextIsPlaying);
+    });
+
+    const sourceLoadSubscription = player.addListener('sourceLoad', ({ duration: sourceDuration }) => {
+      setDuration(sourceDuration * 1000);
+    });
+
+    const timeUpdateSubscription = player.addListener('timeUpdate', ({ currentTime }) => {
+      if (!isScrubbing) {
+        setPosition(currentTime * 1000);
       }
-    }
+    });
+
+    return () => {
+      playingSubscription.remove();
+      sourceLoadSubscription.remove();
+      timeUpdateSubscription.remove();
+    };
+  }, [isScrubbing, player]);
+
+  const setupAudio = async () => {
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: true,
+      shouldDuckAndroid: true,
+    });
   };
 
   const togglePlayPause = async () => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        await videoRef.current.pauseAsync();
-      } else {
-        await videoRef.current.playAsync();
-      }
+    if (isPlaying) {
+      player.pause();
+    } else {
+      player.play();
     }
   };
+
+  const seekToPosition = useCallback(
+    (millis: number) => {
+      const clampedPosition = Math.max(0, Math.min(millis, duration > 0 ? duration : millis));
+      player.currentTime = clampedPosition / 1000;
+      setPosition(clampedPosition);
+    },
+    [duration, player]
+  );
+
+  const handleSeekBySeconds = useCallback(
+    (seconds: number) => {
+      const nextPosition = position + seconds * 1000;
+      seekToPosition(nextPosition);
+    },
+    [position, seekToPosition]
+  );
+
+  const handleScrubComplete = useCallback(
+    (nextPosition: number) => {
+      setIsScrubbing(false);
+      setScrubPosition(null);
+      seekToPosition(nextPosition);
+    },
+    [seekToPosition]
+  );
+
+  const handlePictureInPicture = useCallback(async () => {
+    if (!isPiPSupported || !videoViewRef.current) {
+      Alert.alert('Picture in Picture', 'PiP is not supported on this device.');
+      return;
+    }
+
+    try {
+      await videoViewRef.current.startPictureInPicture();
+    } catch {
+      Alert.alert(
+        'Picture in Picture unavailable',
+        'PiP is not available in this build yet. Install the updated APK after build completes.'
+      );
+    }
+  }, [isPiPSupported]);
 
   const handleDownload = async () => {
     if (!media || !authToken) return;
@@ -146,7 +238,7 @@ export default function PlayerScreen() {
 
       setLocalPath(localUri);
       Alert.alert('Success', 'Downloaded successfully!');
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to download media');
     } finally {
       setIsDownloading(false);
@@ -219,11 +311,7 @@ export default function PlayerScreen() {
       </View>
     );
   }
-
-  const playbackUrl = localPath || apiService.getAuthenticatedMediaUrl(
-    media.relative_path || media.safe_filename
-  );
-  const mediaHeaders = authToken ? apiService.getMediaRequestHeaders() : undefined;
+  const displayPosition = isScrubbing && scrubPosition !== null ? scrubPosition : position;
 
   return (
     <View style={styles.container}>
@@ -237,31 +325,70 @@ export default function PlayerScreen() {
         {media.is_audio ? (
           <View style={styles.audioPlayer}>
             <Ionicons name="musical-notes" size={120} color={colors.primary} />
-            <Video
-              ref={videoRef}
-              source={{ 
-                uri: playbackUrl,
-                headers: mediaHeaders
-              }}
-              onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-              shouldPlay={false}
-              style={{ height: 0 }}
+            <VideoView
+              ref={videoViewRef}
+              player={player}
+              nativeControls={false}
+              style={styles.hiddenAudioPlayer}
             />
           </View>
         ) : (
-          <Video
-            ref={videoRef}
-            source={{ 
-              uri: playbackUrl,
-              headers: mediaHeaders
-            }}
+          <VideoView
+            ref={videoViewRef}
+            player={player}
             style={styles.videoPlayer}
-            resizeMode={ResizeMode.CONTAIN}
-            useNativeControls
-            onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-            shouldPlay={false}
+            contentFit="contain"
+            nativeControls={false}
+            allowsPictureInPicture={isPiPSupported}
+            startsPictureInPictureAutomatically={isPiPSupported}
+            onPictureInPictureStart={() => setIsPiPActive(true)}
+            onPictureInPictureStop={() => setIsPiPActive(false)}
           />
         )}
+
+        {/* Playback Controls */}
+        <View style={styles.playbackContainer}>
+          <View style={styles.transportRow}>
+            <TouchableOpacity
+              style={styles.transportButton}
+              onPress={() => handleSeekBySeconds(-10)}
+              disabled={duration <= 0}
+            >
+              <Ionicons name="play-back" size={24} color={colors.text} />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.playPauseButton} onPress={togglePlayPause}>
+              <Ionicons name={isPlaying ? 'pause' : 'play'} size={30} color={colors.buttonText} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.transportButton}
+              onPress={() => handleSeekBySeconds(10)}
+              disabled={duration <= 0}
+            >
+              <Ionicons name="play-forward" size={24} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          <Slider
+            style={styles.scrubber}
+            minimumValue={0}
+            maximumValue={Math.max(duration, 1)}
+            value={displayPosition}
+            minimumTrackTintColor={colors.primary}
+            maximumTrackTintColor={colors.border}
+            thumbTintColor={colors.primary}
+            onSlidingStart={() => setIsScrubbing(true)}
+            onValueChange={(value) => setScrubPosition(value)}
+            onSlidingComplete={handleScrubComplete}
+            disabled={duration <= 0}
+          />
+
+          <View style={styles.timeRow}>
+            <Text style={styles.timeText}>{formatTime(displayPosition)}</Text>
+            <Text style={styles.timeText}>{formatTime(duration)}</Text>
+          </View>
+        </View>
 
         {/* Media Info */}
         <View style={styles.infoContainer}>
@@ -325,6 +452,28 @@ export default function PlayerScreen() {
             <Ionicons name="share-outline" size={24} color={colors.text} />
             <Text style={styles.actionButtonTextSecondary}>Share</Text>
           </TouchableOpacity>
+
+          {!media.is_audio && (
+            <TouchableOpacity
+              style={styles.actionButtonSecondary}
+              onPress={handlePictureInPicture}
+              disabled={!isPiPSupported}
+            >
+              <Ionicons
+                name={isPiPActive ? 'contract-outline' : 'albums-outline'}
+                size={24}
+                color={isPiPSupported ? colors.text : colors.textTertiary}
+              />
+              <Text
+                style={[
+                  styles.actionButtonTextSecondary,
+                  !isPiPSupported && { color: colors.textTertiary },
+                ]}
+              >
+                {isPiPActive ? 'Exit Picture in Picture' : 'Picture in Picture'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -353,12 +502,58 @@ const styles = StyleSheet.create({
     aspectRatio: 16 / 9,
     backgroundColor: '#000',
   },
+  hiddenAudioPlayer: {
+    width: 1,
+    height: 1,
+    opacity: 0,
+  },
   audioPlayer: {
     width: '100%',
     aspectRatio: 16 / 9,
     backgroundColor: colors.backgroundLight,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  playbackContainer: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  transportRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.lg,
+  },
+  transportButton: {
+    width: 44,
+    height: 44,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playPauseButton: {
+    width: 64,
+    height: 64,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrubber: {
+    width: '100%',
+    height: 40,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  timeText: {
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   infoContainer: {
     padding: spacing.lg,

@@ -43,6 +43,13 @@
             "usesCleartextTraffic": true
           }
         }
+      ],
+      [
+        "expo-video",
+        {
+          "supportsPictureInPicture": true,
+          "supportsBackgroundPlayback": true
+        }
       ]
     ],
     "experiments": {
