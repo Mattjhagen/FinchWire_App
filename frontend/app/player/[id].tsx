@@ -63,21 +63,30 @@ export default function PlayerScreen() {
   };
 
   const loadMedia = async () => {
+    let resolvedMedia: MediaJob | null = null;
+
     try {
       const mediaList = await apiService.getMediaList();
       const item = mediaList.find((m) => m.id === id);
       
       if (item) {
+        resolvedMedia = item;
         setMedia(item);
-        
-        // Check if downloaded locally
-        const localMedia = await storageService.getLocalMedia(item.id);
-        if (localMedia) {
-          setLocalPath(localMedia.local_path);
+
+        // Local metadata lookup should never block playback.
+        try {
+          const localMedia = await storageService.getLocalMedia(item.id);
+          if (localMedia) {
+            setLocalPath(localMedia.local_path);
+          }
+        } catch (storageError) {
+          console.warn('Failed to load local media metadata:', storageError);
         }
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to load media');
+      if (!resolvedMedia) {
+        Alert.alert('Error', 'Failed to load media');
+      }
     } finally {
       setIsLoading(false);
     }
