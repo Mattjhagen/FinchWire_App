@@ -1,9 +1,11 @@
 // Media Card Component - YouTube style
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, borderRadius } from '../utils/theme';
 import { MediaJob } from '../types';
+import { getMediaThumbnailUrl } from '../utils/thumbnails';
 
 interface MediaCardProps {
   media: MediaJob;
@@ -12,19 +14,17 @@ interface MediaCardProps {
 }
 
 export const MediaCard: React.FC<MediaCardProps> = ({ media, onPress, onLongPress }) => {
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
+
+  const thumbnailUrl = useMemo(() => getMediaThumbnailUrl(media), [media]);
+  const canShowThumbnail = Boolean(thumbnailUrl) && !thumbnailFailed;
+
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
-  };
-
-  const formatDuration = (seconds?: number): string => {
-    if (!seconds) return '';
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const getStatusColor = (status: string): string => {
@@ -60,6 +60,15 @@ export const MediaCard: React.FC<MediaCardProps> = ({ media, onPress, onLongPres
           <View style={[styles.thumbnail, styles.audioThumbnail]}>
             <Ionicons name="musical-notes" size={48} color={colors.primary} />
           </View>
+        ) : canShowThumbnail ? (
+          <Image
+            source={{ uri: thumbnailUrl! }}
+            style={styles.thumbnailImage}
+            contentFit="cover"
+            transition={150}
+            cachePolicy="memory-disk"
+            onError={() => setThumbnailFailed(true)}
+          />
         ) : (
           <View style={[styles.thumbnail, styles.videoThumbnail]}>
             <Ionicons name="play-circle" size={48} color={colors.primary} />
@@ -133,6 +142,11 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#1a1a1a',
   },
   videoThumbnail: {
     backgroundColor: '#1a1a1a',
