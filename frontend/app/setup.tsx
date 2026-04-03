@@ -171,7 +171,7 @@ export default function SetupScreen() {
                 </Text>
 
                 <Text style={styles.stepText}>
-                  Once running, enter your server's IP address (starting with http:// or https://) in the Setup screen.
+                  Once running, enter your server&apos;s IP address (starting with http:// or https://) in the Setup screen.
                 </Text>
 
                 <View style={{ height: spacing.xl }} />

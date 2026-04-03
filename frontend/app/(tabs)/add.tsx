@@ -24,13 +24,7 @@ export default function AddScreen() {
 
   const handleDownload = async () => {
     if (!url.trim()) {
-      Alert.alert('Error', 'Please enter a video URL');
-      return;
-    }
-
-    // Basic URL validation
-    if (!url.includes('http://') && !url.includes('https://')) {
-      Alert.alert('Error', 'Please enter a valid URL (starting with http:// or https://)');
+      Alert.alert('Error', 'Please enter a video URL or search phrase');
       return;
     }
 
@@ -42,9 +36,9 @@ export default function AddScreen() {
       });
 
       if (response && response.id) {
-        Alert.alert(
-          'Success',
-          'Download job submitted successfully!',
+      Alert.alert(
+        'Success',
+        'Download job submitted successfully!',
           [
             { 
               text: 'Go to Downloads', 
@@ -64,7 +58,7 @@ export default function AddScreen() {
       }
     } catch (error) {
       console.error('Download error:', error);
-      Alert.alert('Error', 'Failed to connect to server. Ensure your backend is running.');
+      Alert.alert('Error', (error as Error)?.message || 'Failed to connect to server. Ensure your backend is running.');
     } finally {
       setIsLoading(false);
     }
@@ -80,7 +74,7 @@ export default function AddScreen() {
           <Ionicons name="cloud-download" size={60} color={colors.primary} />
           <Text style={styles.title}>Download to Server</Text>
           <Text style={styles.subtitle}>
-            Enter a YouTube, Vimeo, or X (Twitter) URL to download it to your media server.
+            Paste a direct URL or type a search phrase. FinchWire will queue the best match to your server.
           </Text>
         </View>
 
@@ -90,7 +84,7 @@ export default function AddScreen() {
             style={styles.input}
             value={url}
             onChangeText={setUrl}
-            placeholder="https://www.youtube.com/watch?v=..."
+            placeholder="https://... or search topic (example: joe rogan theo von)"
             placeholderTextColor={colors.textTertiary}
             autoCapitalize="none"
             autoCorrect={false}

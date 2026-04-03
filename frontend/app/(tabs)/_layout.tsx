@@ -54,9 +54,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="add"
         options={{
-          title: 'Add',
+          title: 'Fetch',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="add-circle" size={size} color={color} />
+            <Ionicons name="cloud-download" size={size} color={color} />
           ),
         }}
       />

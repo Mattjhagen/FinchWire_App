@@ -1,5 +1,5 @@
 // Download Service for local file management
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 class DownloadService {
   private downloadsDir: string;
@@ -17,6 +17,24 @@ class DownloadService {
     }
   }
 
+  private sanitizeLocalFilename(filename: string): string {
+    const fallback = `media_${Date.now()}.mp4`;
+    const input = String(filename || '').trim();
+    if (!input) return fallback;
+
+    const cleaned = input
+      .replace(/\\/g, '/')
+      .split('/')
+      .pop()
+      ?.replace(/[^\w.\-]+/g, '_')
+      .replace(/^_+/, '')
+      .replace(/_+/g, '_')
+      .slice(0, 180);
+
+    if (!cleaned) return fallback;
+    return cleaned;
+  }
+
   async downloadMedia(
     mediaId: string,
     mediaUrl: string,
@@ -25,8 +43,9 @@ class DownloadService {
     onProgress?: (progress: number) => void
   ): Promise<string> {
     await this.ensureDownloadDirectory();
-    
-    const localPath = `${this.downloadsDir}${filename}`;
+
+    const safeFilename = this.sanitizeLocalFilename(filename || `${mediaId}.mp4`);
+    const localPath = `${this.downloadsDir}${safeFilename}`;
 
     const downloadResumable = FileSystem.createDownloadResumable(
       mediaUrl,

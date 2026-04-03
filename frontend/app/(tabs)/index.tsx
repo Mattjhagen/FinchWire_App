@@ -1,7 +1,8 @@
-// Home Screen - Google-style discovery surface for FinchWire
+// Home Screen - Google-style AI + News + Fetch workflow
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
+  Linking,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -15,329 +16,419 @@ import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { borderRadius, colors, spacing, typography } from '../../src/utils/theme';
 import { apiService } from '../../src/services/api';
-import { Loading } from '../../src/components/Loading';
-import { EmptyState } from '../../src/components/EmptyState';
-import { MediaCard } from '../../src/components/MediaCard';
 import { MediaJob } from '../../src/types';
 
-type SignalCard = {
+type AssistantMode = 'ai' | 'video' | 'news' | 'fetch';
+
+interface NewsItem {
   id: string;
   title: string;
-  value: string;
-  subtitle: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  tint: string;
+  link: string;
+  source: string;
+  publishedAt: string;
+}
+
+const DEFAULT_NEWS_TOPIC = 'AI finance markets';
+const QUICK_TOPICS = [
+  'AI lending',
+  'crypto regulation',
+  'decentralized identity',
+  'fintech trends',
+  'reputation systems',
+];
+
+const QUICK_VIDEO_SEARCHES = [
+  'AI lending protocol explained',
+  'DeFi credit scoring',
+  'Fintech market update',
+  'Ethereum ecosystem news',
+  'Open source AI agents',
+];
+
+const decodeXml = (value: string): string => {
+  return value
+    .replace(/<!\[CDATA\[/g, '')
+    .replace(/\]\]>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+};
+
+const tagValue = (input: string, tag: string): string => {
+  const match = input.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+  return match ? decodeXml(match[1]).trim() : '';
+};
+
+const parseGoogleNewsRss = (xml: string): NewsItem[] => {
+  const items = xml.match(/<item[\s\S]*?<\/item>/gi) || [];
+
+  return items.slice(0, 10).map((item, index) => {
+    const title = tagValue(item, 'title');
+    const link = tagValue(item, 'link');
+    const source = tagValue(item, 'source') || 'Google News';
+    const publishedAt = tagValue(item, 'pubDate');
+
+    return {
+      id: `${link || title || 'news'}-${index}`,
+      title: title || 'Untitled',
+      link,
+      source,
+      publishedAt,
+    };
+  });
+};
+
+const toGoogleNewsRssUrl = (topic: string): string => {
+  const query = encodeURIComponent(topic.trim() || DEFAULT_NEWS_TOPIC);
+  return `https://news.google.com/rss/search?q=${query}&hl=en-US&gl=US&ceid=US:en`;
+};
+
+const looksLikeUrl = (value: string): boolean => /^https?:\/\/\S+/i.test(value.trim());
+
+const statusTone = (status: MediaJob['status']): string => {
+  switch (status) {
+    case 'completed':
+      return colors.success;
+    case 'downloading':
+      return colors.info;
+    case 'queued':
+      return colors.warning;
+    case 'failed':
+    case 'expired':
+    case 'cancelled':
+      return colors.error;
+    default:
+      return colors.textSecondary;
+  }
+};
+
+const getPlaybackPath = (job: MediaJob): string => {
+  return job.relative_path || job.safe_filename || job.media_url || '';
 };
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [assistantPrompt, setAssistantPrompt] = useState('');
-  const [libraryQuery, setLibraryQuery] = useState('');
+  const [mode, setMode] = useState<AssistantMode>('ai');
+  const [prompt, setPrompt] = useState('');
+  const [activeTopic, setActiveTopic] = useState(DEFAULT_NEWS_TOPIC);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { data: mediaList, isLoading, error, refetch, isRefetching } = useQuery({
-    queryKey: ['media-home'],
+  const {
+    data: mediaList,
+    error: mediaError,
+    refetch: refetchMedia,
+    isRefetching: isRefetchingMedia,
+  } = useQuery({
+    queryKey: ['home-media-list'],
     queryFn: () => apiService.getMediaList(),
-    refetchInterval: 5000,
+    refetchInterval: 20000,
+    refetchIntervalInBackground: false,
+    retry: (failureCount, err: any) => {
+      if (String(err?.message || '').toLowerCase().includes('too many requests')) {
+        return false;
+      }
+      return failureCount < 2;
+    },
+  });
+
+  const {
+    data: newsItems,
+    error: newsError,
+    refetch: refetchNews,
+    isRefetching: isRefetchingNews,
+  } = useQuery({
+    queryKey: ['google-news-rss', activeTopic],
+    queryFn: async (): Promise<NewsItem[]> => {
+      const response = await fetch(toGoogleNewsRssUrl(activeTopic));
+      if (!response.ok) {
+        throw new Error(`News fetch failed (${response.status})`);
+      }
+      const xml = await response.text();
+      return parseGoogleNewsRss(xml);
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
     retry: 1,
   });
 
-  const completedMedia = useMemo(
-    () => (mediaList ?? []).filter((item) => item.status === 'completed'),
+  const completedJobs = useMemo(
+    () => (mediaList ?? []).filter((job) => job.status === 'completed').slice(0, 10),
     [mediaList]
   );
+
   const activeJobs = useMemo(
-    () => (mediaList ?? []).filter((item) => item.status === 'queued' || item.status === 'downloading'),
-    [mediaList]
-  );
-  const failedJobs = useMemo(
-    () => (mediaList ?? []).filter((item) => item.status === 'failed'),
-    [mediaList]
-  );
-  const keptCount = useMemo(
-    () => (mediaList ?? []).filter((item) => item.keep_forever === true || item.keep_forever === 1).length,
+    () => (mediaList ?? []).filter((job) => job.status === 'queued' || job.status === 'downloading').slice(0, 5),
     [mediaList]
   );
 
-  const sourceSummary = useMemo(() => {
-    const frequency = new Map<string, number>();
-    for (const item of completedMedia) {
-      const domain = item.source_domain || 'Unknown source';
-      frequency.set(domain, (frequency.get(domain) ?? 0) + 1);
-    }
-    if (frequency.size === 0) return 'No source history yet';
-
-    const top = [...frequency.entries()].sort((a, b) => b[1] - a[1])[0];
-    return `${top[0]} • ${top[1]} watched`;
-  }, [completedMedia]);
-
-  const forYouMedia = useMemo(() => {
-    if (!libraryQuery.trim()) {
-      return completedMedia.slice(0, 8);
-    }
-
-    const q = libraryQuery.toLowerCase();
-    return completedMedia.filter(
-      (item) =>
-        item.filename?.toLowerCase().includes(q) ||
-        item.source_domain?.toLowerCase().includes(q)
-    );
-  }, [completedMedia, libraryQuery]);
-
-  const cards: SignalCard[] = [
-    {
-      id: 'queue',
-      title: 'In Queue',
-      value: String(activeJobs.length),
-      subtitle: activeJobs.length > 0 ? 'Active downloads running' : 'No active downloads',
-      icon: 'cloud-download',
-      tint: colors.info,
-    },
-    {
-      id: 'kept',
-      title: 'Saved Forever',
-      value: String(keptCount),
-      subtitle: 'Excluded from auto-delete',
-      icon: 'bookmark',
-      tint: colors.warning,
-    },
-    {
-      id: 'library',
-      title: 'Library Size',
-      value: String(completedMedia.length),
-      subtitle: 'Completed media items',
-      icon: 'play-circle',
-      tint: colors.success,
-    },
-    {
-      id: 'failed',
-      title: 'Needs Attention',
-      value: String(failedJobs.length),
-      subtitle: failedJobs.length > 0 ? 'Failed jobs ready to retry' : 'No failed downloads',
-      icon: 'alert-circle',
-      tint: failedJobs.length > 0 ? colors.error : colors.textSecondary,
-    },
-  ];
-
-  const isLikelyUrl = (value: string): boolean => /^https?:\/\//i.test(value.trim());
-
-  const handlePromptSubmit = async () => {
-    const prompt = assistantPrompt.trim();
-    if (!prompt || isSubmitting) return;
-
-    if (isLikelyUrl(prompt)) {
-      setIsSubmitting(true);
-      try {
-        await apiService.submitDownload({ url: prompt });
-        setAssistantPrompt('');
-        await refetch();
-        Alert.alert('Queued', 'Download submitted. You can track progress in Downloads.');
-      } catch (submitError: any) {
-        Alert.alert('Error', submitError?.message || 'Failed to queue download');
-      } finally {
-        setIsSubmitting(false);
-      }
-      return;
-    }
-
-    const match = completedMedia.find((item) => item.filename?.toLowerCase().includes(prompt.toLowerCase()));
-    if (match) {
-      router.push(`/player/${match.id}`);
-      return;
-    }
-
-    Alert.alert(
-      'AI Search Preview',
-      'No direct match found yet. Agent-based search + auto-fetch is the next step we can wire to backend.'
-    );
+  const refreshAll = async () => {
+    await Promise.all([refetchMedia(), refetchNews()]);
   };
 
-  const handleMediaPress = (media: MediaJob) => {
-    if (media.status === 'completed') {
-      router.push(`/player/${media.id}`);
+  const openExternal = async (url: string) => {
+    const canOpen = await Linking.canOpenURL(url);
+    if (!canOpen) {
+      Alert.alert('Cannot open link', 'Your phone could not open this link.');
+      return;
+    }
+    await Linking.openURL(url);
+  };
+
+  const handleQueueUrl = async (url: string, isAudio = false) => {
+    setIsSubmitting(true);
+    try {
+      await apiService.submitDownload({
+        url: url.trim(),
+        is_audio: isAudio,
+      });
+      Alert.alert('Queued', 'Video sent to your server queue.');
+      setPrompt('');
+      await refetchMedia();
+    } catch (error: any) {
+      Alert.alert('Queue Error', error?.message || 'Failed to queue this URL.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAssistantAction = async () => {
+    const value = prompt.trim();
+    if (!value) {
+      Alert.alert('Enter something', 'Type a topic or paste a video URL.');
       return;
     }
 
-    if (media.status === 'failed') {
-      Alert.alert(
-        'Download Failed',
-        media.error_message || 'This download failed',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Retry',
-            onPress: async () => {
-              try {
-                await apiService.retryDownload(media.id);
-                refetch();
-              } catch {
-                Alert.alert('Error', 'Failed to retry download');
-              }
-            },
-          },
-        ]
-      );
+    if (looksLikeUrl(value)) {
+      await handleQueueUrl(value, mode === 'fetch');
       return;
     }
 
-    Alert.alert('Info', `This media is currently ${media.status}.`);
+    if (mode === 'fetch') {
+      await handleQueueUrl(value, false);
+      return;
+    }
+
+    if (mode === 'news') {
+      setActiveTopic(value);
+      await refetchNews();
+      return;
+    }
+
+    if (mode === 'video') {
+      const youtubeSearch = `https://www.youtube.com/results?search_query=${encodeURIComponent(value)}`;
+      await openExternal(youtubeSearch);
+      return;
+    }
+
+    // AI mode: refresh related news + queue best search match via backend.
+    if (mode === 'ai') {
+      setActiveTopic(value);
+      await refetchNews();
+      await handleQueueUrl(value, false);
+    }
   };
 
-  const handleMediaLongPress = (media: MediaJob) => {
-    Alert.alert(
-      media.filename || 'Media',
-      'What would you like to do?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await apiService.deleteJob(media.id);
-              refetch();
-            } catch {
-              Alert.alert('Error', 'Failed to delete item');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  if (isLoading) {
-    return <Loading message="Loading home..." />;
-  }
-
-  if (error) {
-    return (
-      <EmptyState
-        icon="cloud-offline-outline"
-        title="Cannot reach server"
-        message={(error as Error).message}
-      />
-    );
-  }
+  const modeLabel = useMemo(() => {
+    switch (mode) {
+      case 'ai':
+        return 'AI Mode';
+      case 'video':
+        return 'Video Search';
+      case 'news':
+        return 'News Search';
+      case 'fetch':
+        return 'Fetch URL';
+      default:
+        return 'AI Mode';
+    }
+  }, [mode]);
 
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={refetch}
+            refreshing={isRefetchingMedia || isRefetchingNews}
+            onRefresh={refreshAll}
             tintColor={colors.primary}
             colors={[colors.primary]}
           />
         }
       >
-        <View style={styles.logoWrap}>
-          <Text style={styles.logoMain}>FinchWire</Text>
-          <Text style={styles.logoSub}>Ask, discover, and queue media instantly</Text>
+        <View style={styles.headerRow}>
+          <Ionicons name="flask-outline" size={24} color="#9FB6FF" />
+          <TouchableOpacity onPress={() => router.push('/(tabs)/settings')}>
+            <View style={styles.avatarRing}>
+              <Text style={styles.avatarText}>P</Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.promptBar}>
-          <Ionicons name="search" size={20} color={colors.textSecondary} />
+        <Text style={styles.brand}>Google</Text>
+        <Text style={styles.brandSub}>FinchWire AI Home</Text>
+
+        <View style={styles.searchBar}>
           <TextInput
-            style={styles.promptInput}
-            placeholder="Ask FinchWire or paste a video URL..."
+            style={styles.searchInput}
+            value={prompt}
+            onChangeText={setPrompt}
+            placeholder="Search news, video ideas, or paste a URL to fetch..."
             placeholderTextColor={colors.textTertiary}
-            value={assistantPrompt}
-            onChangeText={setAssistantPrompt}
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
-            onSubmitEditing={handlePromptSubmit}
+            onSubmitEditing={handleAssistantAction}
           />
-          <TouchableOpacity
-            style={[styles.promptSendButton, (!assistantPrompt.trim() || isSubmitting) && styles.disabledButton]}
-            onPress={handlePromptSubmit}
-            disabled={!assistantPrompt.trim() || isSubmitting}
-          >
-            <Ionicons name="arrow-up" size={16} color={colors.buttonText} />
+          <TouchableOpacity onPress={handleAssistantAction} disabled={isSubmitting}>
+            <Ionicons name="search" size={22} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          <TouchableOpacity style={styles.chip}>
-            <Ionicons name="sparkles" size={16} color={colors.text} />
-            <Text style={styles.chipText}>AI Mode</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.chip} onPress={() => router.push('/(tabs)/downloads')}>
-            <Ionicons name="cloud-download-outline" size={16} color={colors.text} />
-            <Text style={styles.chipText}>Queue ({activeJobs.length})</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.chip} onPress={() => router.push('/(tabs)/add')}>
-            <Ionicons name="add-circle-outline" size={16} color={colors.text} />
-            <Text style={styles.chipText}>Add URL</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.chip}>
-            <Ionicons name="newspaper-outline" size={16} color={colors.text} />
-            <Text style={styles.chipText}>News Feed</Text>
-          </TouchableOpacity>
+        <View style={styles.modeRow}>
+          <ModeChip label="AI Mode" active={mode === 'ai'} onPress={() => setMode('ai')} icon="sparkles-outline" />
+          <ModeChip label="Video" active={mode === 'video'} onPress={() => setMode('video')} icon="play-circle-outline" />
+          <ModeChip label="News" active={mode === 'news'} onPress={() => setMode('news')} icon="newspaper-outline" />
+          <ModeChip label="Fetch" active={mode === 'fetch'} onPress={() => setMode('fetch')} icon="cloud-download-outline" />
+        </View>
+
+        <Text style={styles.modeHint}>
+          {modeLabel}: {mode === 'fetch'
+            ? 'Paste a URL or type a phrase to queue the best match.'
+            : mode === 'ai'
+              ? 'Type a topic to refresh news and auto-queue the top media match.'
+              : 'Type a topic or URL, then tap Search.'}
+        </Text>
+
+        <View style={styles.infoCards}>
+          <InfoCard title="Sunset today" value={new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} sub="Local time" />
+          <InfoCard title="Server queue" value={String(activeJobs.length)} sub="Active downloads" />
+        </View>
+
+        {mediaError ? (
+          <View style={styles.warningBanner}>
+            <Ionicons name="warning-outline" size={16} color={colors.warning} />
+            <Text style={styles.warningText}>Media server warning: {(mediaError as Error).message}</Text>
+          </View>
+        ) : null}
+
+        <SectionTitle title="AI Suggestion Topics" />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalRow}>
+          {QUICK_TOPICS.map((topic) => (
+            <TouchableOpacity
+              key={topic}
+              style={styles.topicPill}
+              onPress={() => {
+                setPrompt(topic);
+                setActiveTopic(topic);
+                setMode('ai');
+                refetchNews();
+              }}
+            >
+              <Text style={styles.topicPillText}>{topic}</Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
 
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Quick Briefing</Text>
-          <Text style={styles.sectionLabel}>{sourceSummary}</Text>
-        </View>
-
-        <View style={styles.signalGrid}>
-          {cards.map((card) => (
-            <View key={card.id} style={styles.signalCard}>
-              <View style={styles.signalTitleRow}>
-                <Ionicons name={card.icon} size={16} color={card.tint} />
-                <Text style={styles.signalTitle}>{card.title}</Text>
-              </View>
-              <Text style={styles.signalValue}>{card.value}</Text>
-              <Text style={styles.signalSubtitle}>{card.subtitle}</Text>
-            </View>
+        <SectionTitle title="Suggested Video Searches" />
+        <View style={styles.cardList}>
+          {QUICK_VIDEO_SEARCHES.map((query) => (
+            <TouchableOpacity
+              key={query}
+              style={styles.videoSuggestionCard}
+              onPress={() => openExternal(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`)}
+            >
+              <Ionicons name="play-circle" size={22} color={colors.primary} />
+              <Text style={styles.videoSuggestionText}>{query}</Text>
+            </TouchableOpacity>
           ))}
         </View>
 
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>For You</Text>
-        </View>
-
-        <View style={styles.librarySearchWrap}>
-          <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
-          <TextInput
-            style={styles.librarySearchInput}
-            placeholder="Filter your media feed..."
-            placeholderTextColor={colors.textTertiary}
-            value={libraryQuery}
-            onChangeText={setLibraryQuery}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          {libraryQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setLibraryQuery('')}>
-              <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
+        <SectionTitle title="Latest News (AI + Finance + Tech)" />
+        {newsError ? (
+          <Text style={styles.errorText}>Could not fetch news right now: {(newsError as Error).message}</Text>
+        ) : null}
+        <View style={styles.cardList}>
+          {(newsItems ?? []).slice(0, 6).map((item) => (
+            <TouchableOpacity key={item.id} style={styles.newsCard} onPress={() => openExternal(item.link)}>
+              <Text style={styles.newsSource}>{item.source}</Text>
+              <Text style={styles.newsTitle} numberOfLines={3}>{item.title}</Text>
+              <Text style={styles.newsMeta} numberOfLines={1}>{item.publishedAt}</Text>
             </TouchableOpacity>
-          )}
+          ))}
+          {(newsItems ?? []).length === 0 && !newsError ? (
+            <Text style={styles.emptyText}>Pull to refresh, or enter a topic above to load fresh news.</Text>
+          ) : null}
         </View>
 
-        {forYouMedia.length === 0 ? (
-          <EmptyState
-            icon="play-circle-outline"
-            title="Nothing to show yet"
-            message="Queue some media and your personalized home feed will appear here."
-          />
-        ) : (
-          <View style={styles.feedList}>
-            {forYouMedia.map((item) => (
-              <MediaCard
-                key={item.id}
-                media={item}
-                onPress={() => handleMediaPress(item)}
-                onLongPress={() => handleMediaLongPress(item)}
-              />
-            ))}
-          </View>
-        )}
+        <SectionTitle title="Recent Downloaded Videos" />
+        <View style={styles.cardList}>
+          {completedJobs.map((job) => (
+            <View key={job.id} style={styles.mediaCard}>
+              <View style={styles.mediaHeaderRow}>
+                <Text style={styles.mediaTitle} numberOfLines={2}>{job.filename || 'Untitled'}</Text>
+                <Text style={[styles.statusPill, { color: statusTone(job.status), borderColor: statusTone(job.status) }]}>
+                  {job.status.toUpperCase()}
+                </Text>
+              </View>
+              <Text style={styles.mediaMeta} numberOfLines={1}>{job.source_domain || 'Unknown source'}</Text>
+              <View style={styles.mediaActions}>
+                <TouchableOpacity style={[styles.actionBtn, styles.primaryBtn]} onPress={() => router.push(`/player/${job.id}`)}>
+                  <Ionicons name="play" size={16} color={colors.buttonText} />
+                  <Text style={styles.actionBtnText}>Play</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.secondaryBtn]}
+                  onPress={() => openExternal(apiService.getExternalMediaUrl(getPlaybackPath(job)))}
+                >
+                  <Ionicons name="link-outline" size={16} color={colors.text} />
+                  <Text style={styles.actionBtnTextSecondary}>Open URL</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+
+          {completedJobs.length === 0 ? (
+            <Text style={styles.emptyText}>No completed videos yet. Paste a URL in Fetch mode to start.</Text>
+          ) : null}
+        </View>
       </ScrollView>
     </View>
+  );
+}
+
+function SectionTitle({ title }: { title: string }) {
+  return <Text style={styles.sectionTitle}>{title}</Text>;
+}
+
+function InfoCard({ title, value, sub }: { title: string; value: string; sub: string }) {
+  return (
+    <View style={styles.infoCard}>
+      <Text style={styles.infoTitle}>{title}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
+      <Text style={styles.infoSub}>{sub}</Text>
+    </View>
+  );
+}
+
+function ModeChip({
+  label,
+  active,
+  onPress,
+  icon,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  icon: keyof typeof Ionicons.glyphMap;
+}) {
+  return (
+    <TouchableOpacity style={[styles.modeChip, active && styles.modeChipActive]} onPress={onPress}>
+      <Ionicons name={icon} size={14} color={active ? colors.buttonText : colors.textSecondary} />
+      <Text style={[styles.modeChipText, active && styles.modeChipTextActive]}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -346,142 +437,264 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  scrollContent: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xl,
+  content: {
+    padding: spacing.md,
+    paddingBottom: spacing.xxl,
   },
-  logoWrap: {
-    marginTop: spacing.md,
-    marginBottom: spacing.lg,
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: spacing.md,
   },
-  logoMain: {
-    ...typography.h1,
-    fontSize: 42,
-    letterSpacing: 1.4,
+  avatarRing: {
+    width: 34,
+    height: 34,
+    borderRadius: borderRadius.full,
+    borderWidth: 2,
+    borderColor: '#33D17A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: colors.text,
     fontWeight: '700',
   },
-  logoSub: {
-    ...typography.bodySmall,
-    marginTop: spacing.xs,
-    color: colors.textSecondary,
+  brand: {
+    fontSize: 52,
+    lineHeight: 56,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
-  promptBar: {
+  brandSub: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.backgroundLight,
     borderRadius: borderRadius.full,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.sm,
-    minHeight: 54,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 2,
+    marginBottom: spacing.sm,
   },
-  promptInput: {
+  searchInput: {
     flex: 1,
     color: colors.text,
     fontSize: 16,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: 11,
   },
-  promptSendButton: {
-    width: 32,
-    height: 32,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  disabledButton: {
-    opacity: 0.45,
-  },
-  chipRow: {
+  modeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
+    marginVertical: spacing.sm,
   },
-  chip: {
+  modeChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    backgroundColor: colors.backgroundLight,
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
     borderRadius: borderRadius.full,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    backgroundColor: colors.backgroundLight,
   },
-  chipText: {
-    ...typography.bodySmall,
-    color: colors.text,
-    fontWeight: '500',
+  modeChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
   },
-  sectionHeaderRow: {
+  modeChipText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '700',
+  },
+  modeChipTextActive: {
+    color: colors.buttonText,
+  },
+  modeHint: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+  },
+  infoCards: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
-  sectionTitle: {
-    ...typography.h3,
-    fontSize: 19,
+  infoCard: {
+    flex: 1,
+    backgroundColor: colors.backgroundLight,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
   },
-  sectionLabel: {
+  infoTitle: {
     ...typography.caption,
     color: colors.textSecondary,
   },
-  signalGrid: {
+  infoValue: {
+    ...typography.h3,
+    fontSize: 22,
+    marginTop: 2,
+  },
+  infoSub: {
+    ...typography.caption,
+    color: colors.textTertiary,
+  },
+  warningBanner: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: spacing.lg,
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#3A2A14',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#7A5A22',
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  warningText: {
+    ...typography.caption,
+    color: '#FFCE6A',
+    flex: 1,
+  },
+  sectionTitle: {
+    ...typography.h3,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  horizontalRow: {
+    gap: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  topicPill: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+  },
+  topicPillText: {
+    ...typography.bodySmall,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  cardList: {
     gap: spacing.sm,
   },
-  signalCard: {
-    width: '48%',
+  videoSuggestionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.backgroundLight,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  videoSuggestionText: {
+    ...typography.bodySmall,
+    color: colors.text,
+    flex: 1,
+    fontWeight: '600',
+  },
+  newsCard: {
     backgroundColor: colors.backgroundLight,
     borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
-    minHeight: 112,
   },
-  signalTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  signalTitle: {
+  newsSource: {
     ...typography.caption,
-    color: colors.textSecondary,
+    color: colors.primaryLight,
+    marginBottom: 4,
   },
-  signalValue: {
-    ...typography.h2,
-    marginTop: spacing.xs,
+  newsTitle: {
+    ...typography.body,
+    color: colors.text,
+    fontWeight: '700',
+    marginBottom: 6,
   },
-  signalSubtitle: {
+  newsMeta: {
     ...typography.caption,
-    color: colors.textSecondary,
-    marginTop: spacing.xs,
+    color: colors.textTertiary,
   },
-  librarySearchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  mediaCard: {
     backgroundColor: colors.backgroundLight,
     borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    minHeight: 44,
-    marginBottom: spacing.md,
+    padding: spacing.md,
   },
-  librarySearchInput: {
-    flex: 1,
-    color: colors.text,
-    paddingHorizontal: spacing.sm,
-    fontSize: 15,
-  },
-  feedList: {
+  mediaHeaderRow: {
+    flexDirection: 'row',
     gap: spacing.sm,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  mediaTitle: {
+    ...typography.body,
+    flex: 1,
+    fontWeight: '700',
+  },
+  statusPill: {
+    ...typography.caption,
+    borderWidth: 1,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    fontWeight: '700',
+  },
+  mediaMeta: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  mediaActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.full,
+  },
+  primaryBtn: {
+    backgroundColor: colors.primary,
+  },
+  secondaryBtn: {
+    backgroundColor: colors.surface,
+  },
+  actionBtnText: {
+    ...typography.bodySmall,
+    color: colors.buttonText,
+    fontWeight: '700',
+  },
+  actionBtnTextSecondary: {
+    ...typography.bodySmall,
+    color: colors.text,
+    fontWeight: '700',
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.error,
+  },
+  emptyText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
   },
 });

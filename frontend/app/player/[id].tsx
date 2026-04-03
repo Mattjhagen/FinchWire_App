@@ -4,12 +4,13 @@ import {
   View,
   Text,
   StyleSheet,
+  Pressable,
   TouchableOpacity,
   ScrollView,
   Alert,
-  Linking,
   Share,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import { Audio } from 'expo-av';
@@ -22,6 +23,9 @@ import { storageService } from '../../src/services/storage';
 import { useAuthStore } from '../../src/store/authStore';
 import { Loading } from '../../src/components/Loading';
 import { MediaJob } from '../../src/types';
+
+const PLAYER_POSITION_KEY = '@finchwire_player_positions_v1';
+const PLAYER_PREFS_KEY = '@finchwire_player_prefs_v1';
 
 export default function PlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -43,6 +47,15 @@ export default function PlayerScreen() {
   const [isPiPActive, setIsPiPActive] = useState(false);
   const [isUpdatingKeep, setIsUpdatingKeep] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [autoplayEnabled, setAutoplayEnabled] = useState(true);
+  const [shuffleEnabled, setShuffleEnabled] = useState(false);
+  const [playlist, setPlaylist] = useState<MediaJob[]>([]);
+
+  const hasAppliedResumeRef = useRef(false);
+  const endedHandledRef = useRef(false);
+  const lastSavedPositionRef = useRef(0);
+  const leftTapAtRef = useRef(0);
+  const rightTapAtRef = useRef(0);
 
   const mediaHeaders = useMemo(() => {
     if (!media || localPath || !authToken) {
@@ -51,8 +64,13 @@ export default function PlayerScreen() {
     return apiService.getMediaRequestHeaders();
   }, [authToken, localPath, media]);
 
+  const mediaPath = useMemo(() => {
+    if (!media) return '';
+    return media.relative_path || media.safe_filename || media.media_url || '';
+  }, [media]);
+
   const playbackUrl = media
-    ? localPath || apiService.getAuthenticatedMediaUrl(media.relative_path || media.safe_filename)
+    ? localPath || apiService.getAuthenticatedMediaUrl(mediaPath)
     : null;
 
   const videoSource = useMemo(() => {
@@ -70,6 +88,60 @@ export default function PlayerScreen() {
     };
   }, [mediaHeaders, playbackUrl]);
 
+  const getSavedPosition = useCallback(async (mediaId: string): Promise<number> => {
+    try {
+      const raw = await AsyncStorage.getItem(PLAYER_POSITION_KEY);
+      const map = raw ? JSON.parse(raw) : {};
+      return Number(map?.[mediaId] || 0);
+    } catch {
+      return 0;
+    }
+  }, []);
+
+  const savePosition = useCallback(async (mediaId: string, millis: number) => {
+    if (!mediaId || !Number.isFinite(millis)) return;
+    try {
+      const raw = await AsyncStorage.getItem(PLAYER_POSITION_KEY);
+      const map = raw ? JSON.parse(raw) : {};
+      map[mediaId] = Math.max(0, Math.floor(millis));
+      await AsyncStorage.setItem(PLAYER_POSITION_KEY, JSON.stringify(map));
+    } catch {
+      // Best effort only.
+    }
+  }, []);
+
+  const clearSavedPosition = useCallback(async (mediaId: string) => {
+    if (!mediaId) return;
+    try {
+      const raw = await AsyncStorage.getItem(PLAYER_POSITION_KEY);
+      const map = raw ? JSON.parse(raw) : {};
+      delete map[mediaId];
+      await AsyncStorage.setItem(PLAYER_POSITION_KEY, JSON.stringify(map));
+    } catch {
+      // Best effort only.
+    }
+  }, []);
+
+  const loadPlayerPrefs = useCallback(async () => {
+    try {
+      const raw = await AsyncStorage.getItem(PLAYER_PREFS_KEY);
+      if (!raw) return;
+      const prefs = JSON.parse(raw);
+      if (typeof prefs.autoplay === 'boolean') setAutoplayEnabled(prefs.autoplay);
+      if (typeof prefs.shuffle === 'boolean') setShuffleEnabled(prefs.shuffle);
+    } catch {
+      // Ignore malformed prefs
+    }
+  }, []);
+
+  const savePlayerPrefs = useCallback(async (prefs: { autoplay: boolean; shuffle: boolean }) => {
+    try {
+      await AsyncStorage.setItem(PLAYER_PREFS_KEY, JSON.stringify(prefs));
+    } catch {
+      // Best effort only.
+    }
+  }, []);
+
   const player = useVideoPlayer(videoSource, (createdPlayer) => {
     createdPlayer.timeUpdateEventInterval = 0.25;
     createdPlayer.staysActiveInBackground = true;
@@ -80,11 +152,17 @@ export default function PlayerScreen() {
 
     try {
       const mediaList = await apiService.getMediaList();
+      const playable = mediaList
+        .filter((item) => item.status === 'completed')
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      setPlaylist(playable);
       const item = mediaList.find((m) => m.id === id);
       
       if (item) {
         resolvedMedia = item;
         setMedia(item);
+        hasAppliedResumeRef.current = false;
+        endedHandledRef.current = false;
 
         // Local metadata lookup should never block playback.
         try {
@@ -108,18 +186,15 @@ export default function PlayerScreen() {
   useEffect(() => {
     loadMedia();
     setupAudio();
+    loadPlayerPrefs();
     setIsPiPSupported(isPictureInPictureSupported());
     
     return () => {
-      // Cleanup audio session
-      Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-      });
+      if (media?.id) {
+        savePosition(media.id, position);
+      }
     };
-  }, [id, loadMedia]);
+  }, [id, loadMedia, loadPlayerPrefs, media?.id, position, savePosition]);
 
   useEffect(() => {
     setIsPlaying(player.playing);
@@ -138,11 +213,18 @@ export default function PlayerScreen() {
       if (status === 'readyToPlay' && player.duration > 0) {
         setDuration(player.duration * 1000);
       }
+      if (status === 'error') {
+        Alert.alert(
+          'Playback Error',
+          'Could not play this media in-app. Re-download from the Add tab and try again.'
+        );
+      }
     });
 
     const timeUpdateSubscription = player.addListener('timeUpdate', ({ currentTime }) => {
+      const currentMillis = currentTime * 1000;
       if (!isScrubbing) {
-        setPosition(currentTime * 1000);
+        setPosition(currentMillis);
       }
 
       // Some sources publish duration late; keep duration in sync when it becomes available.
@@ -152,6 +234,11 @@ export default function PlayerScreen() {
           return Math.abs(prevDuration - nextDuration) > 250 ? nextDuration : prevDuration;
         });
       }
+
+      if (media?.id && Math.abs(currentMillis - lastSavedPositionRef.current) >= 2000) {
+        lastSavedPositionRef.current = currentMillis;
+        savePosition(media.id, currentMillis);
+      }
     });
 
     return () => {
@@ -160,21 +247,92 @@ export default function PlayerScreen() {
       statusSubscription.remove();
       timeUpdateSubscription.remove();
     };
-  }, [isScrubbing, player]);
+  }, [isScrubbing, media?.id, player, savePosition]);
 
   const setupAudio = async () => {
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: false,
       playsInSilentModeIOS: true,
       staysActiveInBackground: true,
-      shouldDuckAndroid: true,
+      shouldDuckAndroid: false,
     });
   };
+
+  useEffect(() => {
+    if (!media?.id || hasAppliedResumeRef.current || duration <= 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const savedMillis = await getSavedPosition(media.id);
+      if (cancelled) return;
+      if (savedMillis > 1500 && savedMillis < duration - 1500) {
+        player.currentTime = savedMillis / 1000;
+        setPosition(savedMillis);
+      }
+      hasAppliedResumeRef.current = true;
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [duration, getSavedPosition, media?.id, player]);
+
+  useEffect(() => {
+    savePlayerPrefs({ autoplay: autoplayEnabled, shuffle: shuffleEnabled });
+  }, [autoplayEnabled, savePlayerPrefs, shuffleEnabled]);
+
+  const getNextJob = useCallback((): MediaJob | null => {
+    if (!media?.id || playlist.length <= 1) return null;
+    const currentIndex = playlist.findIndex((item) => item.id === media.id);
+    if (currentIndex < 0) return null;
+
+    if (shuffleEnabled) {
+      const candidates = playlist.filter((item) => item.id !== media.id);
+      if (candidates.length === 0) return null;
+      const randomIndex = Math.floor(Math.random() * candidates.length);
+      return candidates[randomIndex] || null;
+    }
+
+    const nextIndex = currentIndex + 1;
+    if (nextIndex >= playlist.length) return null;
+    return playlist[nextIndex];
+  }, [media?.id, playlist, shuffleEnabled]);
+
+  useEffect(() => {
+    if (!media?.id || !autoplayEnabled || endedHandledRef.current) return;
+    if (duration <= 0) return;
+
+    const remaining = duration - position;
+    const nearEnd = remaining <= 1200 && position > 0;
+    if (!nearEnd || isPlaying) return;
+
+    endedHandledRef.current = true;
+    clearSavedPosition(media.id);
+
+    const nextJob = getNextJob();
+    if (!nextJob) {
+      return;
+    }
+
+    setTimeout(() => {
+      router.replace(`/player/${nextJob.id}`);
+    }, 350);
+  }, [
+    autoplayEnabled,
+    clearSavedPosition,
+    duration,
+    getNextJob,
+    isPlaying,
+    media?.id,
+    position,
+    router,
+  ]);
 
   const togglePlayPause = async () => {
     if (isPlaying) {
       player.pause();
     } else {
+      endedHandledRef.current = false;
       player.play();
     }
   };
@@ -182,6 +340,7 @@ export default function PlayerScreen() {
   const seekToPosition = useCallback(
     (millis: number) => {
       const clampedPosition = Math.max(0, Math.min(millis, duration > 0 ? duration : millis));
+      endedHandledRef.current = false;
       player.currentTime = clampedPosition / 1000;
       setPosition(clampedPosition);
     },
@@ -194,6 +353,21 @@ export default function PlayerScreen() {
       seekToPosition(nextPosition);
     },
     [position, seekToPosition]
+  );
+
+  const handleDoubleTapZone = useCallback(
+    (direction: 'left' | 'right') => {
+      const now = Date.now();
+      const tapRef = direction === 'left' ? leftTapAtRef : rightTapAtRef;
+      if (now - tapRef.current < 320) {
+        // Per your preference: left = +10s, right = -10s
+        handleSeekBySeconds(direction === 'left' ? 10 : -10);
+        tapRef.current = 0;
+        return;
+      }
+      tapRef.current = now;
+    },
+    [handleSeekBySeconds]
   );
 
   const handleScrubComplete = useCallback(
@@ -227,14 +401,13 @@ export default function PlayerScreen() {
     setIsDownloading(true);
     try {
       const mediaHeaders = apiService.getMediaRequestHeaders();
-      const mediaUrl = apiService.getAuthenticatedMediaUrl(
-        media.relative_path || media.safe_filename
-      );
+      const mediaUrl = apiService.getExternalMediaUrl(mediaPath);
+      const localName = media.safe_filename || media.relative_path || `${media.id}.mp4`;
 
       const localUri = await downloadService.downloadMedia(
         media.id,
         mediaUrl,
-        media.safe_filename,
+        localName,
         mediaHeaders,
         (progress) => setDownloadProgress(progress)
       );
@@ -263,30 +436,10 @@ export default function PlayerScreen() {
     }
   };
 
-  const handleOpenInVLC = async () => {
-    if (!media) return;
-
-    const vlcUrl = apiService.getVlcUrl(media.relative_path || media.safe_filename);
-    
-    const canOpen = await Linking.canOpenURL(vlcUrl);
-    if (canOpen) {
-      await Linking.openURL(vlcUrl);
-    } else {
-      Alert.alert(
-        'VLC Not Found',
-        'VLC player is not installed. Would you like to share the link instead?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Share', onPress: handleShare },
-        ]
-      );
-    }
-  };
-
   const handleShare = async () => {
     if (!media) return;
 
-    const mediaUrl = apiService.getMediaUrl(media.relative_path || media.safe_filename);
+    const mediaUrl = apiService.getExternalMediaUrl(mediaPath);
     try {
       await Share.share({
         message: `Watch ${media.filename}: ${mediaUrl}`,
@@ -409,17 +562,23 @@ export default function PlayerScreen() {
             />
           </View>
         ) : (
-          <VideoView
-            ref={videoViewRef}
-            player={player}
-            style={styles.videoPlayer}
-            contentFit="contain"
-            nativeControls={false}
-            allowsPictureInPicture={isPiPSupported}
-            startsPictureInPictureAutomatically={isPiPSupported}
-            onPictureInPictureStart={() => setIsPiPActive(true)}
-            onPictureInPictureStop={() => setIsPiPActive(false)}
-          />
+          <View style={styles.videoWrapper}>
+            <VideoView
+              ref={videoViewRef}
+              player={player}
+              style={styles.videoPlayer}
+              contentFit="contain"
+              nativeControls={false}
+              allowsPictureInPicture={isPiPSupported}
+              startsPictureInPictureAutomatically={isPiPSupported}
+              onPictureInPictureStart={() => setIsPiPActive(true)}
+              onPictureInPictureStop={() => setIsPiPActive(false)}
+            />
+            <View style={styles.gestureOverlay} pointerEvents="box-none">
+              <Pressable style={styles.gestureHalf} onPress={() => handleDoubleTapZone('left')} />
+              <Pressable style={styles.gestureHalf} onPress={() => handleDoubleTapZone('right')} />
+            </View>
+          </View>
         )}
 
         {/* Playback Controls */}
@@ -494,6 +653,35 @@ export default function PlayerScreen() {
 
         {/* Actions */}
         <View style={styles.actionsContainer}>
+          <View style={styles.queueControlsRow}>
+            <TouchableOpacity
+              style={[styles.toggleChip, autoplayEnabled && styles.toggleChipActive]}
+              onPress={() => setAutoplayEnabled((prev) => !prev)}
+            >
+              <Ionicons
+                name={autoplayEnabled ? 'play-forward-circle' : 'play-forward-circle-outline'}
+                size={18}
+                color={autoplayEnabled ? colors.buttonText : colors.textSecondary}
+              />
+              <Text style={[styles.toggleChipText, autoplayEnabled && styles.toggleChipTextActive]}>
+                Autoplay Next
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleChip, shuffleEnabled && styles.toggleChipActive]}
+              onPress={() => setShuffleEnabled((prev) => !prev)}
+            >
+              <Ionicons
+                name={shuffleEnabled ? 'shuffle' : 'shuffle-outline'}
+                size={18}
+                color={shuffleEnabled ? colors.buttonText : colors.textSecondary}
+              />
+              <Text style={[styles.toggleChipText, shuffleEnabled && styles.toggleChipTextActive]}>
+                Shuffle
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Download Button */}
           {!localPath && (
             <TouchableOpacity
@@ -516,12 +704,6 @@ export default function PlayerScreen() {
               </Text>
             </View>
           )}
-
-          {/* Open in VLC */}
-          <TouchableOpacity style={styles.actionButtonSecondary} onPress={handleOpenInVLC}>
-            <Ionicons name="play-circle-outline" size={24} color={colors.text} />
-            <Text style={styles.actionButtonTextSecondary}>Open in VLC</Text>
-          </TouchableOpacity>
 
           {/* Share */}
           <TouchableOpacity style={styles.actionButtonSecondary} onPress={handleShare}>
@@ -605,10 +787,23 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingTop: 40,
   },
+  videoWrapper: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    backgroundColor: '#000',
+    position: 'relative',
+  },
   videoPlayer: {
     width: '100%',
     aspectRatio: 16 / 9,
     backgroundColor: '#000',
+  },
+  gestureOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+  },
+  gestureHalf: {
+    flex: 1,
   },
   hiddenAudioPlayer: {
     width: 1,
@@ -692,6 +887,35 @@ const styles = StyleSheet.create({
   actionsContainer: {
     padding: spacing.lg,
     gap: spacing.md,
+  },
+  queueControlsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  toggleChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.sm,
+  },
+  toggleChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  toggleChipText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '700',
+  },
+  toggleChipTextActive: {
+    color: colors.buttonText,
   },
   actionButton: {
     backgroundColor: colors.primary,

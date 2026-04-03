@@ -29,8 +29,14 @@ export default function DownloadsScreen() {
   } = useQuery({
     queryKey: ['downloads-server'],
     queryFn: () => apiService.getMediaList(),
-    refetchInterval: 3000,
-    retry: 1,
+    refetchInterval: 20000,
+    refetchIntervalInBackground: false,
+    retry: (failureCount, err: any) => {
+      if (String(err?.message || '').toLowerCase().includes('too many requests')) {
+        return false;
+      }
+      return failureCount < 2;
+    },
   });
 
   const {

@@ -8,6 +8,36 @@ class ApiService {
   private authToken: string = '';
   private authMode: 'token' | 'session' | null = null;
 
+  private isPrivateOrLocalHost(host: string): boolean {
+    if (!host) return false;
+    const value = host.trim().toLowerCase();
+
+    if (value === 'localhost' || value === '127.0.0.1' || value === '::1') {
+      return true;
+    }
+
+    // RFC1918/private ranges
+    if (/^10\./.test(value)) return true;
+    if (/^192\.168\./.test(value)) return true;
+    if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(value)) return true;
+    if (/^169\.254\./.test(value)) return true;
+
+    return false;
+  }
+
+  private normalizeMediaPath(filename: string): string {
+    if (!filename) return '';
+    return filename
+      .replace(/\\/g, '/')
+      .replace(/^vlc:\/\/https?:\/\//i, '')
+      .replace(/^vlc-x-callback:\/\/x-callback-url\/stream\?url=https?:\/\//i, '')
+      .replace(/^https?:\/\/[^/]+\/media\//i, '')
+      .replace(/^\/+/, '')
+      .replace(/^media\//i, '')
+      .replace(/\?.*$/, '')
+      .trim();
+  }
+
   private withTokenQuery(url: string, token: string): string {
     const separator = url.includes('?') ? '&' : '?';
     return `${url}${separator}token=${encodeURIComponent(token)}`;
@@ -16,7 +46,9 @@ class ApiService {
   setBaseUrl(url: string) {
     let formattedUrl = url.trim().replace(/\/$/, '');
     if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
-      formattedUrl = `http://${formattedUrl}`;
+      const host = formattedUrl.split('/')[0];
+      const protocol = this.isPrivateOrLocalHost(host) ? 'http' : 'https';
+      formattedUrl = `${protocol}://${formattedUrl}`;
     }
     this.baseUrl = formattedUrl;
   }
@@ -213,13 +245,19 @@ class ApiService {
 
   // Build media URLs
   getMediaUrl(filename: string, download: boolean = false): string {
+    const normalizedPath = this.normalizeMediaPath(filename);
+    if (!normalizedPath) return `${this.baseUrl}/media`;
     // Only encode segments, not the whole path to preserve slashes
-    const encodedPath = filename.split('/').map(segment => encodeURIComponent(segment)).join('/');
+    const encodedPath = normalizedPath.split('/').filter(Boolean).map(segment => encodeURIComponent(segment)).join('/');
     return `${this.baseUrl}/media/${encodedPath}${download ? '?download=true' : ''}`;
   }
 
   getVlcUrl(filename: string): string {
     const mediaUrl = this.getExternalMediaUrl(filename);
+    if (Platform.OS === 'ios') {
+      // iOS VLC deep link format
+      return `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(mediaUrl)}`;
+    }
     return `vlc://${mediaUrl}`;
   }
 
@@ -236,7 +274,9 @@ class ApiService {
   // Build authenticated media URL with token
   getAuthenticatedMediaUrl(filename: string): string {
     const url = this.getMediaUrl(filename);
-    if (this.authToken && this.authMode === 'token') {
+    // Session-based backends often fail to forward Cookie headers to media players on mobile.
+    // Query token keeps playback/download robust across in-app and external players.
+    if (this.authToken) {
       return this.withTokenQuery(url, this.authToken);
     }
     return url;
