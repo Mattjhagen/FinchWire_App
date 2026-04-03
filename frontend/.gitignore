@@ -34,7 +34,7 @@ yarn-error.*
 .env*.local
 
 # firebase secrets
-firebase/google-services.json
+# firebase/google-services.json
 firebase/GoogleService-Info.plist
 
 # typescript
