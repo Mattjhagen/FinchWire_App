@@ -18,6 +18,14 @@ import { borderRadius, colors, spacing, typography } from '../../src/utils/theme
 import { apiService } from '../../src/services/api';
 import { personalizationService } from '../../src/services/personalization';
 import { MediaJob } from '../../src/types';
+import {
+  fetchWeather,
+  fetchMarketPrices,
+  fetchVerseOfDay,
+  fetchRssFeed,
+  PRESET_RSS_FEEDS,
+  type RssItem,
+} from '../../src/services/widgets';
 
 type AssistantMode = 'ai' | 'video' | 'news' | 'fetch';
 
@@ -154,6 +162,46 @@ export default function HomeScreen() {
     retry: 1,
   });
 
+  const { data: weather, refetch: refetchWeather } = useQuery({
+    queryKey: ['widget-weather'],
+    queryFn: fetchWeather,
+    staleTime: 15 * 60 * 1000,
+    refetchInterval: 30 * 60 * 1000,
+    retry: 1,
+  });
+
+  const { data: marketPrices, refetch: refetchMarket } = useQuery({
+    queryKey: ['widget-market'],
+    queryFn: () => fetchMarketPrices(['BTC', 'ETH', 'SOL']),
+    staleTime: 2 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+    retry: 1,
+  });
+
+  const { data: verse, refetch: refetchVerse } = useQuery({
+    queryKey: ['widget-verse'],
+    queryFn: fetchVerseOfDay,
+    staleTime: 60 * 60 * 1000,
+    refetchInterval: false,
+    retry: 1,
+  });
+
+  const { data: rssFeedItems, refetch: refetchRss } = useQuery({
+    queryKey: ['widget-rss-feeds'],
+    queryFn: async (): Promise<RssItem[]> => {
+      const results = await Promise.allSettled(
+        PRESET_RSS_FEEDS.map((f) => fetchRssFeed(f.url, f.label, 4))
+      );
+      return results
+        .filter((r): r is PromiseFulfilledResult<RssItem[]> => r.status === 'fulfilled')
+        .flatMap((r) => r.value)
+        .slice(0, 12);
+    },
+    staleTime: 10 * 60 * 1000,
+    refetchInterval: 15 * 60 * 1000,
+    retry: 1,
+  });
+
   const completedJobs = useMemo(
     () => (mediaList ?? []).filter((job) => job.status === 'completed').slice(0, 10),
     [mediaList]
@@ -165,7 +213,7 @@ export default function HomeScreen() {
   );
 
   const refreshAll = async () => {
-    await Promise.all([refetchMedia(), refetchNews()]);
+    await Promise.all([refetchMedia(), refetchNews(), refetchWeather(), refetchMarket(), refetchVerse(), refetchRss()]);
   };
 
   const openExternal = async (url: string) => {
@@ -307,10 +355,55 @@ export default function HomeScreen() {
               : 'Type a topic or URL, then tap Search.'}
         </Text>
 
+        {/* ── Weather + Queue row ── */}
         <View style={styles.infoCards}>
-          <InfoCard title="Sunset today" value={new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} sub="Local time" />
-          <InfoCard title="Server queue" value={String(activeJobs.length)} sub="Active downloads" />
+          <InfoCard
+            title={weather?.location ? `Weather · ${weather.location}` : 'Weather'}
+            value={weather ? `${weather.temp_f}°F` : '—'}
+            sub={weather?.condition ?? 'Loading…'}
+            icon="partly-sunny-outline"
+          />
+          <InfoCard
+            title="Server queue"
+            value={String(activeJobs.length)}
+            sub="Active downloads"
+            icon="cloud-download-outline"
+          />
         </View>
+
+        {/* ── Market Ticker ── */}
+        {(marketPrices ?? []).length > 0 ? (
+          <>
+            <SectionTitle title="Market Watch" />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalRow}>
+              {(marketPrices ?? []).map((ticker) => (
+                <View key={ticker.symbol} style={styles.marketCard}>
+                  <Text style={styles.marketSymbol}>{ticker.symbol}</Text>
+                  <Text style={styles.marketPrice}>
+                    ${ticker.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                  </Text>
+                  <Text style={[styles.marketChange, { color: ticker.change24h >= 0 ? colors.success : colors.error }]}>
+                    {ticker.change24h >= 0 ? '+' : ''}{ticker.change24h.toFixed(2)}%
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+          </>
+        ) : null}
+
+        {/* ── Verse of the Day ── */}
+        {verse ? (
+          <>
+            <SectionTitle title="Verse of the Day" />
+            <View style={styles.verseCard}>
+              <Ionicons name="book-outline" size={18} color={colors.primary} />
+              <View style={styles.verseBody}>
+                <Text style={styles.verseText}>&ldquo;{verse.text}&rdquo;</Text>
+                <Text style={styles.verseRef}>— {verse.reference}</Text>
+              </View>
+            </View>
+          </>
+        ) : null}
 
         {mediaError ? (
           <View style={styles.warningBanner}>
@@ -353,6 +446,26 @@ export default function HomeScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* ── RSS Feed Headlines ── */}
+        {(rssFeedItems ?? []).length > 0 ? (
+          <>
+            <SectionTitle title="RSS Headlines" />
+            <View style={styles.cardList}>
+              {(rssFeedItems ?? []).slice(0, 6).map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.newsCard}
+                  onPress={() => openExternal(item.link)}
+                >
+                  <Text style={styles.newsSource}>{item.source}</Text>
+                  <Text style={styles.newsTitle} numberOfLines={2}>{item.title}</Text>
+                  <Text style={styles.newsMeta} numberOfLines={1}>{item.publishedAt}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        ) : null}
 
         <SectionTitle title="Latest News (AI + Finance + Tech)" />
         {newsError ? (
@@ -430,12 +543,15 @@ function SectionTitle({ title }: { title: string }) {
   return <Text style={styles.sectionTitle}>{title}</Text>;
 }
 
-function InfoCard({ title, value, sub }: { title: string; value: string; sub: string }) {
+function InfoCard({ title, value, sub, icon }: { title: string; value: string; sub: string; icon?: keyof typeof Ionicons.glyphMap }) {
   return (
     <View style={styles.infoCard}>
-      <Text style={styles.infoTitle}>{title}</Text>
+      <View style={styles.infoTitleRow}>
+        {icon ? <Ionicons name={icon} size={12} color={colors.textSecondary} /> : null}
+        <Text style={styles.infoTitle} numberOfLines={1}>{title}</Text>
+      </View>
       <Text style={styles.infoValue}>{value}</Text>
-      <Text style={styles.infoSub}>{sub}</Text>
+      <Text style={styles.infoSub} numberOfLines={1}>{sub}</Text>
     </View>
   );
 }
@@ -565,9 +681,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.sm,
   },
+  infoTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   infoTitle: {
     ...typography.caption,
     color: colors.textSecondary,
+    flex: 1,
   },
   infoValue: {
     ...typography.h3,
@@ -577,6 +699,59 @@ const styles = StyleSheet.create({
   infoSub: {
     ...typography.caption,
     color: colors.textTertiary,
+  },
+  marketCard: {
+    backgroundColor: colors.backgroundLight,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    minWidth: 90,
+  },
+  marketSymbol: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '700',
+  },
+  marketPrice: {
+    ...typography.body,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  marketChange: {
+    ...typography.caption,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  verseCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: colors.backgroundLight,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  verseBody: {
+    flex: 1,
+  },
+  verseText: {
+    ...typography.body,
+    color: colors.text,
+    fontStyle: 'italic',
+    lineHeight: 22,
+  },
+  verseRef: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    fontWeight: '600',
   },
   warningBanner: {
     flexDirection: 'row',
