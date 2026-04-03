@@ -1,5 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Linking,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { borderRadius, colors, spacing, typography } from '../../../utils/theme';
@@ -10,8 +20,7 @@ interface LivePlayerProps {
   channel: LiveChannel | null;
 }
 
-// Injected into the WebView to listen for YouTube's JS API error events.
-// YouTube fires a postMessage with {event:'onError', info:<code>} when playback fails.
+// Injected into the WebView to catch YouTube iframe API error postMessages.
 const YT_ERROR_LISTENER_JS = `
 (function() {
   window.addEventListener('message', function(evt) {
@@ -20,36 +29,48 @@ const YT_ERROR_LISTENER_JS = `
       if (d && d.event === 'onError') {
         window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'yt_error', code: d.info }));
       }
-      if (d && d.event === 'onStateChange' && d.info === -1) {
-        // state -1 = unstarted; harmless but useful for debugging
-      }
     } catch(e) {}
   });
   true;
 })();
 `;
 
-// A robust desktop Chrome user-agent helps bypass some embed restrictions.
 const WEBVIEW_USER_AGENT =
   'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 
 export function LivePlayer({ channel }: LivePlayerProps) {
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+
   const [isLoading, setIsLoading] = useState(true);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
-  // Incrementing this key forces a full WebView remount (crash recovery).
   const [mountKey, setMountKey] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
+
+  // Auto-hide controls overlay after 3 s in fullscreen
+  useEffect(() => {
+    if (!isFullscreen || !controlsVisible) return;
+    const t = setTimeout(() => setControlsVisible(false), 3000);
+    return () => clearTimeout(t);
+  }, [isFullscreen, controlsVisible]);
+
+  // Exit fullscreen when rotating back to portrait
+  useEffect(() => {
+    if (!isLandscape && isFullscreen) {
+      setIsFullscreen(false);
+    }
+  }, [isLandscape, isFullscreen]);
 
   const embed = useMemo(() => {
-    if (!channel) {
-      return { url: null, sourceUrl: null, error: 'No channel selected.' };
-    }
+    if (!channel) return { url: null, sourceUrl: null, error: 'No channel selected.' };
     return getLiveEmbedResult(channel);
   }, [channel]);
 
   useEffect(() => {
     setIsLoading(true);
     setRuntimeError(null);
-    setMountKey((k) => k + 1); // force remount when channel changes
+    setMountKey((k) => k + 1);
   }, [channel?.id]);
 
   const handleMessage = useCallback((event: WebViewMessageEvent) => {
@@ -78,12 +99,17 @@ export function LivePlayer({ channel }: LivePlayerProps) {
   }, []);
 
   const handleOpenExternal = useCallback(() => {
-    if (embed.sourceUrl) {
-      Linking.openURL(embed.sourceUrl).catch(() => undefined);
-    }
+    if (embed.sourceUrl) Linking.openURL(embed.sourceUrl).catch(() => undefined);
   }, [embed.sourceUrl]);
 
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen((v) => !v);
+    setControlsVisible(true);
+  }, []);
+
   const errorMessage = runtimeError || embed.error;
+
+  // ── Placeholder states ─────────────────────────────────────────────────────
 
   if (!channel) {
     return (
@@ -101,17 +127,11 @@ export function LivePlayer({ channel }: LivePlayerProps) {
         <Ionicons name="warning-outline" size={30} color={colors.warning} />
         <Text style={styles.placeholderTitle}>Channel unavailable</Text>
         <Text style={styles.placeholderText}>{errorMessage || 'Embed URL is missing.'}</Text>
-        {embed.sourceUrl ? (
-          <TouchableOpacity style={styles.externalBtn} onPress={handleOpenExternal}>
-            <Ionicons name="logo-youtube" size={16} color={colors.buttonText} />
-            <Text style={styles.externalBtnText}>Watch on YouTube</Text>
-          </TouchableOpacity>
-        ) : null}
+        {embed.sourceUrl ? <ExternalBtn onPress={handleOpenExternal} /> : null}
       </View>
     );
   }
 
-  // Show error overlay when embedding fails (Error 153 / embed disabled)
   if (errorMessage && !isLoading) {
     return (
       <View style={styles.placeholder}>
@@ -119,12 +139,7 @@ export function LivePlayer({ channel }: LivePlayerProps) {
         <Text style={styles.placeholderTitle}>Stream Unavailable</Text>
         <Text style={styles.placeholderText}>{errorMessage}</Text>
         <View style={styles.errorActions}>
-          {embed.sourceUrl ? (
-            <TouchableOpacity style={styles.externalBtn} onPress={handleOpenExternal}>
-              <Ionicons name="logo-youtube" size={16} color={colors.buttonText} />
-              <Text style={styles.externalBtnText}>Watch on YouTube</Text>
-            </TouchableOpacity>
-          ) : null}
+          {embed.sourceUrl ? <ExternalBtn onPress={handleOpenExternal} /> : null}
           <TouchableOpacity style={styles.reloadBtn} onPress={handleReload}>
             <Ionicons name="refresh" size={16} color={colors.text} />
             <Text style={styles.reloadBtnText}>Retry</Text>
@@ -134,8 +149,34 @@ export function LivePlayer({ channel }: LivePlayerProps) {
     );
   }
 
+  // ── Player dimensions ──────────────────────────────────────────────────────
+  // In fullscreen or landscape: fill the whole screen.
+  // In portrait inline: fixed 16:9 box.
+  const playerWidth = isFullscreen || isLandscape ? width : width - spacing.md * 2;
+  const playerHeight = isFullscreen || isLandscape ? height : Math.round(playerWidth * (9 / 16));
+
+  const shellStyle = [
+    styles.playerShell,
+    (isFullscreen || isLandscape) && {
+      position: 'absolute' as const,
+      top: 0,
+      left: 0,
+      width,
+      height,
+      zIndex: 100,
+      borderRadius: 0,
+      borderWidth: 0,
+    },
+  ];
+
   return (
-    <View style={styles.playerShell}>
+    <View style={shellStyle}>
+      {isFullscreen || isLandscape ? (
+        <StatusBar hidden />
+      ) : (
+        <StatusBar hidden={false} />
+      )}
+
       {isLoading ? (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator color={colors.primary} size="small" />
@@ -144,57 +185,74 @@ export function LivePlayer({ channel }: LivePlayerProps) {
       ) : null}
 
       <WebView
-        // Changing key forces a full remount — used on channel switch and crash recovery
         key={`${channel.id}-${mountKey}`}
         source={{ uri: embed.url }}
-        style={styles.player}
-        // Playback settings
+        style={{ width: playerWidth, height: playerHeight, backgroundColor: '#000' }}
         allowsFullscreenVideo
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
-        // Prevents YouTube from opening new windows/tabs which causes the grey screen
         setSupportMultipleWindows={false}
-        // Android: prevents grey screen after render process crash
         onRenderProcessGone={() => {
           setRuntimeError(null);
           setIsLoading(true);
           setMountKey((k) => k + 1);
         }}
-        // User agent so YouTube doesn't refuse the embed
         userAgent={WEBVIEW_USER_AGENT}
-        // Allow JS for the YouTube iframe API error listener
         javaScriptEnabled
         injectedJavaScript={YT_ERROR_LISTENER_JS}
         onMessage={handleMessage}
-        // Lifecycle
-        onLoadStart={() => {
-          setIsLoading(true);
-          setRuntimeError(null);
-        }}
+        onLoadStart={() => { setIsLoading(true); setRuntimeError(null); }}
         onLoadEnd={() => setIsLoading(false)}
-        onError={() => {
-          setRuntimeError('This stream could not be loaded right now.');
-          setIsLoading(false);
-        }}
-        onHttpError={(syntheticEvent) => {
-          const { statusCode } = syntheticEvent.nativeEvent;
-          if (statusCode === 403 || statusCode === 451) {
-            setRuntimeError('This stream is geo-restricted or embedding is blocked. Tap "Watch on YouTube".');
-          } else {
-            setRuntimeError(`Stream returned HTTP ${statusCode}. Try watching on YouTube.`);
-          }
+        onError={() => { setRuntimeError('This stream could not be loaded right now.'); setIsLoading(false); }}
+        onHttpError={(e) => {
+          const code = e.nativeEvent.statusCode;
+          setRuntimeError(
+            code === 403 || code === 451
+              ? 'Stream is geo-restricted or embedding is blocked. Tap "Watch on YouTube".'
+              : `Stream returned HTTP ${code}. Try watching on YouTube.`
+          );
           setIsLoading(false);
         }}
       />
 
-      {/* Persistent "Watch on YouTube" shortcut when stream is playing but error-prone */}
-      {!isLoading && !errorMessage && embed.sourceUrl ? (
-        <TouchableOpacity style={styles.ytShortcut} onPress={handleOpenExternal}>
-          <Ionicons name="logo-youtube" size={13} color={colors.textSecondary} />
-          <Text style={styles.ytShortcutText}>Open in YouTube</Text>
-        </TouchableOpacity>
-      ) : null}
+      {/* Tappable overlay to show/hide controls in fullscreen */}
+      <TouchableOpacity
+        style={styles.controlsTap}
+        activeOpacity={1}
+        onPress={() => isFullscreen && setControlsVisible((v) => !v)}
+      >
+        {/* Controls row — always visible in portrait, fade in/out in fullscreen */}
+        {(!isFullscreen || controlsVisible) ? (
+          <View style={[styles.controlsRow, (isFullscreen || isLandscape) && styles.controlsRowFullscreen]}>
+            {/* Fullscreen / exit button */}
+            <TouchableOpacity style={styles.iconBtn} onPress={toggleFullscreen}>
+              <Ionicons
+                name={isFullscreen ? 'contract-outline' : 'expand-outline'}
+                size={20}
+                color="#fff"
+              />
+            </TouchableOpacity>
+
+            {/* YouTube shortcut */}
+            {embed.sourceUrl ? (
+              <TouchableOpacity style={styles.ytShortcut} onPress={handleOpenExternal}>
+                <Ionicons name="logo-youtube" size={13} color={colors.textSecondary} />
+                <Text style={styles.ytShortcutText}>YouTube</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
+      </TouchableOpacity>
     </View>
+  );
+}
+
+function ExternalBtn({ onPress }: { onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.externalBtn} onPress={onPress}>
+      <Ionicons name="logo-youtube" size={16} color="#fff" />
+      <Text style={styles.externalBtnText}>Watch on YouTube</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -205,15 +263,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: '#000',
     overflow: 'hidden',
-    minHeight: 220,
-  },
-  player: {
-    height: 260,
-    backgroundColor: '#000',
   },
   loadingOverlay: {
     position: 'absolute',
-    zIndex: 3,
+    zIndex: 5,
     top: spacing.sm,
     right: spacing.sm,
     flexDirection: 'row',
@@ -227,6 +280,42 @@ const styles = StyleSheet.create({
   loadingText: {
     ...typography.caption,
     color: colors.text,
+  },
+  // Invisible tap target covering the whole player
+  controlsTap: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+    justifyContent: 'flex-end',
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: spacing.xs,
+    padding: spacing.xs,
+    paddingBottom: Platform.OS === 'android' ? spacing.xs : spacing.sm,
+  },
+  controlsRowFullscreen: {
+    paddingBottom: 24, // extra bottom padding in fullscreen / landscape
+  },
+  iconBtn: {
+    backgroundColor: colors.overlay,
+    borderRadius: borderRadius.full,
+    padding: 8,
+  },
+  ytShortcut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.overlay,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+  ytShortcutText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 11,
   },
   placeholder: {
     minHeight: 220,
@@ -264,7 +353,7 @@ const styles = StyleSheet.create({
   },
   externalBtnText: {
     ...typography.caption,
-    color: colors.buttonText,
+    color: '#fff',
     fontWeight: '700',
   },
   reloadBtn: {
@@ -282,22 +371,5 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.text,
     fontWeight: '700',
-  },
-  ytShortcut: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    position: 'absolute',
-    bottom: spacing.xs,
-    right: spacing.sm,
-    backgroundColor: colors.overlay,
-    borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-  },
-  ytShortcutText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontSize: 11,
   },
 });

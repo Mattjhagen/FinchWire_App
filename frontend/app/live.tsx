@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { ChannelGuide } from '../src/features/live/components/ChannelGuide';
@@ -23,6 +24,8 @@ import { borderRadius, colors, spacing, typography } from '../src/utils/theme';
 export default function LiveTvPage() {
   const router = useRouter();
   const params = useLocalSearchParams<{ channel?: string }>();
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
 
   const queryChannelId = useMemo(
     () => normalizeChannelParam(params.channel),
@@ -102,7 +105,13 @@ export default function LiveTvPage() {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      {/* In landscape the LivePlayer fills the screen via absolute positioning;
+          hide the scroll content behind it so nothing peeks through */}
+      <ScrollView
+        contentContainerStyle={styles.content}
+        scrollEnabled={!isLandscape}
+        style={isLandscape ? styles.scrollHidden : undefined}
+      >
         <View style={styles.headerRow}>
           <View style={styles.headerCopy}>
             <Text style={styles.title}>Live TV</Text>
@@ -185,6 +194,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.md,
     paddingBottom: spacing.xxl,
+  },
+  scrollHidden: {
+    opacity: 0,
   },
   headerRow: {
     flexDirection: 'row',
