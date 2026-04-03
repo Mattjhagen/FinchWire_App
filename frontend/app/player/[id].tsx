@@ -9,6 +9,7 @@ import {
   ScrollView,
   Alert,
   Share,
+  Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -46,6 +47,7 @@ export default function PlayerScreen() {
   const [scrubPosition, setScrubPosition] = useState<number | null>(null);
   const [isPiPSupported, setIsPiPSupported] = useState(false);
   const [isPiPActive, setIsPiPActive] = useState(false);
+  const [isLaunchingExternalPlayer, setIsLaunchingExternalPlayer] = useState(false);
   const [isUpdatingKeep, setIsUpdatingKeep] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [autoplayEnabled, setAutoplayEnabled] = useState(true);
@@ -409,7 +411,7 @@ export default function PlayerScreen() {
     setIsDownloading(true);
     try {
       const mediaHeaders = apiService.getMediaRequestHeaders();
-      const mediaUrl = apiService.getExternalMediaUrl(mediaPath);
+      const mediaUrl = await apiService.getShareMediaUrl(media.id, mediaPath);
       const localName = media.safe_filename || media.relative_path || `${media.id}.mp4`;
 
       const localUri = await downloadService.downloadMedia(
@@ -447,7 +449,7 @@ export default function PlayerScreen() {
   const handleShare = async () => {
     if (!media) return;
 
-    const mediaUrl = apiService.getExternalMediaUrl(mediaPath);
+    const mediaUrl = await apiService.getShareMediaUrl(media.id, mediaPath);
     try {
       await Share.share({
         message: `Watch ${media.filename}: ${mediaUrl}`,
@@ -457,6 +459,25 @@ export default function PlayerScreen() {
       console.error('Error sharing:', error);
     }
   };
+
+  const handleOpenInVlc = useCallback(async () => {
+    if (!media) return;
+    try {
+      setIsLaunchingExternalPlayer(true);
+      player.pause();
+      const vlcUrl = apiService.getVlcUrl(mediaPath);
+      const canOpen = await Linking.canOpenURL(vlcUrl);
+      if (!canOpen) {
+        Alert.alert('VLC not found', 'Install VLC to open this media externally.');
+        return;
+      }
+      await Linking.openURL(vlcUrl);
+    } catch {
+      Alert.alert('Unable to open VLC', 'Please try again.');
+    } finally {
+      setTimeout(() => setIsLaunchingExternalPlayer(false), 1500);
+    }
+  }, [media, mediaPath, player]);
 
   const handleToggleKeepDownload = async () => {
     if (!media || isUpdatingKeep) return;
@@ -578,7 +599,7 @@ export default function PlayerScreen() {
               contentFit="contain"
               nativeControls={false}
               allowsPictureInPicture={isPiPSupported}
-              startsPictureInPictureAutomatically={isPiPSupported}
+              startsPictureInPictureAutomatically={false}
               onPictureInPictureStart={() => setIsPiPActive(true)}
               onPictureInPictureStop={() => setIsPiPActive(false)}
             />
@@ -712,6 +733,18 @@ export default function PlayerScreen() {
               </Text>
             </View>
           )}
+
+          {/* Open in VLC */}
+          <TouchableOpacity
+            style={[styles.actionButtonSecondary, isLaunchingExternalPlayer && styles.actionButtonDisabled]}
+            onPress={handleOpenInVlc}
+            disabled={isLaunchingExternalPlayer}
+          >
+            <Ionicons name="play-circle-outline" size={24} color={colors.text} />
+            <Text style={styles.actionButtonTextSecondary}>
+              {isLaunchingExternalPlayer ? 'Opening VLC...' : 'Open in VLC'}
+            </Text>
+          </TouchableOpacity>
 
           {/* Share */}
           <TouchableOpacity style={styles.actionButtonSecondary} onPress={handleShare}>

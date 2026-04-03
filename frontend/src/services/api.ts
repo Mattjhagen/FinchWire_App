@@ -23,6 +23,12 @@ interface ServerSettingsResponse {
   settings: ServerRuntimeSettings;
 }
 
+interface ShareUrlResponse {
+  success: boolean;
+  media_url: string;
+  share_url: string;
+}
+
 class ApiService {
   private baseUrl: string = '';
   private authToken: string = '';
@@ -284,6 +290,22 @@ class ApiService {
       method: 'PATCH',
       body: JSON.stringify({ keep_forever: keepForever }),
     });
+  }
+
+  async getShareMediaUrl(jobId: string, fallbackPath?: string): Promise<string> {
+    try {
+      const response = await this.request<ShareUrlResponse>(`${API_ENDPOINTS.DOWNLOADS}/${jobId}/share`);
+      if (response?.share_url) {
+        return response.share_url;
+      }
+    } catch {
+      // Fall through to tokenized local URL fallback.
+    }
+
+    if (!fallbackPath) {
+      return this.baseUrl;
+    }
+    return this.getExternalMediaUrl(fallbackPath);
   }
 
   // Build media URLs
