@@ -62,7 +62,7 @@
           "disableIOS": true,
           "androidIntentFilters": [
             "text/plain",
-            "text/*",
+
             "video/*"
           ],
           "androidMultiIntentFilters": [
