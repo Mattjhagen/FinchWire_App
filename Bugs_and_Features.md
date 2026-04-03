@@ -13,3 +13,6 @@ never kick user out of the app (to read an article or to watch a video) in the d
 help me set up push notifications, also upon first time app launch ask user about notifications. 
 
 Can we also enable live voice like how you can chat with Grok or ChatGPT?
+
+
+can we also add an autodownload on certain channels i like whenever they post a new video it downloads to the server?
