@@ -14,8 +14,13 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { borderRadius, colors, spacing, typography } from '../../src/utils/theme';
-import { discoveryNewsService, DiscoverArticle } from '../../src/services/discoveryNews';
-import { personalizationService } from '../../src/services/personalization';
+import { apiService } from '../../src/services/api';
+import { LiveStory } from '../../src/types';
+
+const prettyScore = (value?: number) => {
+  if (typeof value !== 'number' || Number.isNaN(value)) return '0';
+  return value.toFixed(1);
+};
 
 export default function DiscoverScreen() {
   const router = useRouter();
@@ -26,39 +31,73 @@ export default function DiscoverScreen() {
     refetch,
     isRefetching,
   } = useQuery({
-    queryKey: ['discover-feed'],
-    queryFn: () => discoveryNewsService.getPersonalizedFeed(36),
-    staleTime: 5 * 60 * 1000,
-    refetchInterval: 10 * 60 * 1000,
+    queryKey: ['discover-feed-live-stories'],
+    queryFn: () => apiService.getLiveStories(48),
+    staleTime: 2 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
   });
 
   const {
-    data: interests = [],
+    data: interestData,
+    refetch: refetchInterests,
   } = useQuery({
-    queryKey: ['discover-interests'],
-    queryFn: () => personalizationService.getTopInterests(12),
+    queryKey: ['discover-interest-profile'],
+    queryFn: () => apiService.getMyInterests(),
     staleTime: 2 * 60 * 1000,
   });
 
-  const openArticle = (item: DiscoverArticle) => {
+  const topInterests = interestData?.topTopics?.map((entry) => entry.topic) || [];
+
+  const refreshAll = async () => {
+    await Promise.all([refetch(), refetchInterests()]);
+  };
+
+  const openArticle = (item: LiveStory) => {
     router.push({
       pathname: '/article',
       params: {
-        url: encodeURIComponent(item.link),
+        url: encodeURIComponent(item.url),
         title: encodeURIComponent(item.title),
         source: encodeURIComponent(item.source),
       },
     });
   };
 
-  const openVideo = async (videoUrl?: string) => {
-    if (!videoUrl) return;
-    const canOpen = await Linking.canOpenURL(videoUrl);
-    if (!canOpen) {
-      Alert.alert('Cannot open video', 'This source does not expose a playable video URL.');
-      return;
+  const openSource = async (url: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        Alert.alert('Cannot open link', 'This source URL is not available on your phone.');
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Cannot open', 'Could not open this URL.');
     }
-    await Linking.openURL(videoUrl);
+  };
+
+  const sendFeedback = async (
+    item: LiveStory,
+    interaction_type:
+      | 'story_liked'
+      | 'story_dismissed'
+      | 'topic_muted'
+      | 'topic_followed'
+      | 'story_opened'
+  ) => {
+    try {
+      await apiService.sendInterestFeedback({
+        interaction_type,
+        story_id: item.id,
+        title: item.title,
+        source: item.source,
+        topics: item.topics || [],
+        keywords: item.keywords || [],
+      });
+      await refetchInterests();
+    } catch (error: any) {
+      Alert.alert('Feedback failed', error?.message || 'Could not update your interest profile.');
+    }
   };
 
   return (
@@ -68,7 +107,7 @@ export default function DiscoverScreen() {
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}
-            onRefresh={refetch}
+            onRefresh={refreshAll}
             tintColor={colors.primary}
             colors={[colors.primary]}
           />
@@ -77,34 +116,44 @@ export default function DiscoverScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Discover</Text>
           <Text style={styles.subtitle}>
-            Personalized from what you ask FinchWire AI and what you watch/download.
+            Stories are ranked server-side using your interaction signals, recency, and trend velocity.
           </Text>
         </View>
 
         <View style={styles.chipRow}>
-          {interests.slice(0, 8).map((interest) => (
+          {topInterests.slice(0, 8).map((interest) => (
             <View key={interest} style={styles.chip}>
               <Text style={styles.chipText}>{interest}</Text>
             </View>
           ))}
+          {topInterests.length === 0 ? (
+            <Text style={styles.emptyInterestText}>Like or dismiss stories to train your feed.</Text>
+          ) : null}
         </View>
 
         {error ? (
           <View style={styles.errorBanner}>
             <Ionicons name="warning-outline" size={16} color={colors.warning} />
             <Text style={styles.errorText}>
-              Could not load news right now: {(error as Error).message}
+              Could not load personalized stories: {(error as Error).message}
             </Text>
           </View>
         ) : null}
 
         <View style={styles.list}>
           {feed.map((item) => (
-            <ArticleCard
+            <StoryCard
               key={item.id}
               item={item}
-              onOpen={() => openArticle(item)}
-              onOpenVideo={() => openVideo(item.videoUrl)}
+              onOpen={() => {
+                sendFeedback(item, 'story_opened').catch(() => undefined);
+                openArticle(item);
+              }}
+              onOpenSource={() => openSource(item.url)}
+              onLike={() => sendFeedback(item, 'story_liked')}
+              onDismiss={() => sendFeedback(item, 'story_dismissed')}
+              onMuteTopic={() => sendFeedback(item, 'topic_muted')}
+              onFollowTopic={() => sendFeedback(item, 'topic_followed')}
             />
           ))}
         </View>
@@ -114,7 +163,7 @@ export default function DiscoverScreen() {
             <Ionicons name="newspaper-outline" size={28} color={colors.textSecondary} />
             <Text style={styles.emptyTitle}>No stories yet</Text>
             <Text style={styles.emptyText}>
-              Pull to refresh. Personalization improves as you chat with AI and watch more media.
+              Pull to refresh. You can also run a manual cycle in Alerts to ingest and rank now.
             </Text>
           </View>
         ) : null}
@@ -123,64 +172,103 @@ export default function DiscoverScreen() {
   );
 }
 
-function ArticleCard({
+function StoryCard({
   item,
   onOpen,
-  onOpenVideo,
+  onOpenSource,
+  onLike,
+  onDismiss,
+  onMuteTopic,
+  onFollowTopic,
 }: {
-  item: DiscoverArticle;
+  item: LiveStory;
   onOpen: () => void;
-  onOpenVideo: () => void;
+  onOpenSource: () => void;
+  onLike: () => void;
+  onDismiss: () => void;
+  onMuteTopic: () => void;
+  onFollowTopic: () => void;
 }) {
   const [imageFailed, setImageFailed] = React.useState(false);
   const showImage = Boolean(item.imageUrl && !imageFailed);
-  const hasVideo = Boolean(item.videoUrl);
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onOpen} activeOpacity={0.9}>
-      {showImage ? (
-        <Image
-          source={{ uri: item.imageUrl }}
-          style={styles.cardImage}
-          resizeMode="cover"
-          onError={() => setImageFailed(true)}
-        />
-      ) : (
-        <View style={styles.imagePlaceholder}>
-          <Ionicons name="newspaper-outline" size={28} color={colors.textSecondary} />
-        </View>
-      )}
+    <View style={styles.card}>
+      <TouchableOpacity onPress={onOpen} activeOpacity={0.9}>
+        {showImage ? (
+          <Image
+            source={{ uri: item.imageUrl || undefined }}
+            style={styles.cardImage}
+            resizeMode="cover"
+            onError={() => setImageFailed(true)}
+          />
+        ) : (
+          <View style={styles.imagePlaceholder}>
+            <Ionicons name="newspaper-outline" size={28} color={colors.textSecondary} />
+          </View>
+        )}
+      </TouchableOpacity>
 
       <View style={styles.cardBody}>
         <View style={styles.metaRow}>
           <Text style={styles.source} numberOfLines={1}>{item.source}</Text>
           <Text style={styles.metaDot}>•</Text>
           <Text style={styles.date} numberOfLines={1}>
-            {new Date(item.publishedAt).toLocaleDateString()}
+            {new Date(item.publishedAt).toLocaleString()}
           </Text>
         </View>
-
         <Text style={styles.cardTitle} numberOfLines={3}>{item.title}</Text>
-        <Text style={styles.cardSummary} numberOfLines={3}>{item.summary}</Text>
+        <Text style={styles.cardSummary} numberOfLines={3}>{item.summary || 'No summary available.'}</Text>
+
+        <View style={styles.scoreRow}>
+          <ScoreBadge label="Hotness" value={prettyScore(item.hotnessScore)} />
+          <ScoreBadge label="Velocity" value={prettyScore(item.velocityScore)} />
+          <ScoreBadge label="Interest" value={prettyScore(item.userInterestMatch)} />
+        </View>
+
+        <View style={styles.reasonRow}>
+          {(item.reasonCodes || []).slice(0, 3).map((reason) => (
+            <View key={`${item.id}-${reason}`} style={styles.reasonChip}>
+              <Text style={styles.reasonChipText}>{reason}</Text>
+            </View>
+          ))}
+        </View>
 
         <View style={styles.actionRow}>
-          <View style={styles.matchRow}>
-            {item.matchedInterests.slice(0, 2).map((interest) => (
-              <View key={`${item.id}-${interest}`} style={styles.matchChip}>
-                <Text style={styles.matchChipText}>{interest}</Text>
-              </View>
-            ))}
-          </View>
-
-          {hasVideo ? (
-            <TouchableOpacity style={styles.videoBtn} onPress={onOpenVideo}>
-              <Ionicons name="play-circle-outline" size={14} color={colors.buttonText} />
-              <Text style={styles.videoBtnText}>Play Video</Text>
-            </TouchableOpacity>
-          ) : null}
+          <TouchableOpacity style={styles.primaryBtn} onPress={onOpenSource}>
+            <Ionicons name="open-outline" size={14} color={colors.buttonText} />
+            <Text style={styles.primaryBtnText}>Open Source</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onLike}>
+            <Ionicons name="thumbs-up-outline" size={14} color={colors.text} />
+            <Text style={styles.secondaryBtnText}>Interested</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onDismiss}>
+            <Ionicons name="eye-off-outline" size={14} color={colors.text} />
+            <Text style={styles.secondaryBtnText}>Not for me</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onFollowTopic}>
+            <Ionicons name="add-circle-outline" size={14} color={colors.text} />
+            <Text style={styles.secondaryBtnText}>Follow topic</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onMuteTopic}>
+            <Ionicons name="ban-outline" size={14} color={colors.text} />
+            <Text style={styles.secondaryBtnText}>Mute topic</Text>
+          </TouchableOpacity>
         </View>
       </View>
-    </TouchableOpacity>
+    </View>
+  );
+}
+
+function ScoreBadge({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.scoreBadge}>
+      <Text style={styles.scoreLabel}>{label}</Text>
+      <Text style={styles.scoreValue}>{value}</Text>
+    </View>
   );
 }
 
@@ -224,6 +312,10 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontWeight: '700',
   },
+  emptyInterestText: {
+    ...typography.caption,
+    color: colors.textTertiary,
+  },
   list: {
     gap: spacing.md,
   },
@@ -236,12 +328,12 @@ const styles = StyleSheet.create({
   },
   cardImage: {
     width: '100%',
-    height: 180,
+    height: 190,
     backgroundColor: colors.surface,
   },
   imagePlaceholder: {
     width: '100%',
-    height: 180,
+    height: 190,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#141414',
@@ -279,20 +371,38 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
   },
-  actionRow: {
-    marginTop: spacing.md,
+  scoreRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
+    gap: spacing.xs,
+    marginTop: spacing.md,
   },
-  matchRow: {
+  scoreBadge: {
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    gap: 5,
+    alignItems: 'center',
+  },
+  scoreLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  scoreValue: {
+    ...typography.caption,
+    color: colors.text,
+    fontWeight: '700',
+  },
+  reasonRow: {
     flexDirection: 'row',
     gap: spacing.xs,
     flexWrap: 'wrap',
-    flex: 1,
+    marginTop: spacing.sm,
   },
-  matchChip: {
+  reasonChip: {
     borderRadius: borderRadius.full,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
@@ -300,23 +410,43 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#5A2323',
   },
-  matchChipText: {
+  reasonChipText: {
     ...typography.caption,
     color: '#FFB4B4',
     fontWeight: '700',
   },
-  videoBtn: {
+  actionRow: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+  },
+  primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.primary,
+    gap: 5,
     borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+    backgroundColor: colors.primary,
   },
-  videoBtnText: {
+  primaryBtnText: {
     ...typography.caption,
     color: colors.buttonText,
+    fontWeight: '700',
+  },
+  secondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+    backgroundColor: colors.surface,
+  },
+  secondaryBtnText: {
+    ...typography.caption,
+    color: colors.text,
     fontWeight: '700',
   },
   errorBanner: {
@@ -338,16 +468,14 @@ const styles = StyleSheet.create({
   emptyState: {
     marginTop: spacing.xl,
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   emptyTitle: {
-    ...typography.body,
-    fontWeight: '700',
+    ...typography.h3,
   },
   emptyText: {
     ...typography.bodySmall,
     color: colors.textSecondary,
     textAlign: 'center',
-    maxWidth: 300,
   },
 });

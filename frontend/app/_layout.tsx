@@ -4,6 +4,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { Linking } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import { useAuthStore } from '../src/store/authStore';
@@ -158,6 +159,22 @@ function RootLayoutNav() {
     return () => {
       cancelled = true;
       subscription.remove();
+    };
+  }, [routeIncomingUrl]);
+
+  // Handle push-notification deep links.
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const incoming = response?.notification?.request?.content?.data?.url;
+      const normalized = normalizeIncomingUrl(
+        typeof incoming === 'string' ? incoming : null
+      );
+      if (!normalized) return;
+      void routeIncomingUrl(normalized);
+    });
+
+    return () => {
+      sub.remove();
     };
   }, [routeIncomingUrl]);
 

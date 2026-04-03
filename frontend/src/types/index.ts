@@ -88,3 +88,151 @@ export interface SessionResponse {
   authenticated: boolean;
   username?: string;
 }
+
+export interface InterestVector {
+  topics: Record<string, number>;
+  sources: Record<string, number>;
+  creators: Record<string, number>;
+  categories: Record<string, number>;
+  keywords: Record<string, number>;
+  updatedAt: string;
+}
+
+export interface InterestProfileResponse {
+  success: boolean;
+  interestVector: InterestVector;
+  topTopics: { topic: string; score: number }[];
+}
+
+export interface StoryFeedbackPayload {
+  interaction_type:
+    | 'story_opened'
+    | 'story_clicked'
+    | 'story_bookmarked'
+    | 'story_liked'
+    | 'topic_followed'
+    | 'creator_followed'
+    | 'video_played'
+    | 'video_downloaded'
+    | 'notification_opened'
+    | 'story_dismissed'
+    | 'topic_muted'
+    | 'creator_muted'
+    | 'notification_ignored';
+  story_id?: string;
+  title?: string;
+  source?: string;
+  topics?: string[];
+  categories?: string[];
+  creators?: string[];
+  keywords?: string[];
+}
+
+export interface LiveStory {
+  id: string;
+  title: string;
+  url: string;
+  source: string;
+  publishedAt: string;
+  summary?: string;
+  imageUrl?: string | null;
+  topics?: string[];
+  keywords?: string[];
+  sources?: string[];
+  popularityScore?: number;
+  velocityScore?: number;
+  hotnessScore?: number;
+  freshnessScore?: number;
+  userInterestMatch?: number;
+  reasonCodes?: string[];
+  isFresh?: boolean;
+}
+
+export interface CreatorWatch {
+  id: string;
+  provider: 'youtube';
+  channelId: string;
+  displayName: string;
+  enabled: boolean;
+  notifyOnLive: boolean;
+  notifyOnUpload: boolean;
+  notifyOnMajorUploadOnly: boolean;
+  highPriority?: boolean;
+  tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreatorWatchPayload {
+  provider?: 'youtube';
+  channelId: string;
+  displayName: string;
+  enabled?: boolean;
+  notifyOnLive?: boolean;
+  notifyOnUpload?: boolean;
+  notifyOnMajorUploadOnly?: boolean;
+  highPriority?: boolean;
+  tags?: string[];
+}
+
+export interface CreatorEvent {
+  id: string;
+  provider: 'youtube';
+  channelId: string;
+  eventType: 'live_started' | 'video_published' | 'livestream_scheduled';
+  title: string;
+  url: string;
+  thumbnailUrl?: string | null;
+  publishedAt: string;
+  detectedAt: string;
+  dedupeKey: string;
+}
+
+export interface NotificationPreferences {
+  enabled: boolean;
+  breakingStory: boolean;
+  risingStory: boolean;
+  creatorLive: boolean;
+  creatorUpload: boolean;
+  quietHoursStart?: string | null;
+  quietHoursEnd?: string | null;
+  minSeverity?: number;
+  dailyCap?: number;
+  personalizedOnly?: boolean;
+}
+
+export interface NotificationPreferencesPayload {
+  enabled?: boolean;
+  breakingStory?: boolean;
+  risingStory?: boolean;
+  creatorLive?: boolean;
+  creatorUpload?: boolean;
+  quietHoursStart?: string | null;
+  quietHoursEnd?: string | null;
+  minSeverity?: number;
+  dailyCap?: number;
+  personalizedOnly?: boolean;
+}
+
+export interface FinchNotification {
+  id: string;
+  userId: string;
+  type:
+    | 'breaking_story'
+    | 'rising_story'
+    | 'favorite_creator_live'
+    | 'favorite_creator_upload'
+    | 'topic_alert';
+  title: string;
+  body: string;
+  url?: string;
+  imageUrl?: string;
+  createdAt: string;
+  sentAt?: string | null;
+  openedAt?: string | null;
+  deliveryStatus: 'queued' | 'sent' | 'failed' | 'skipped';
+  dedupeKey: string;
+  reasonCode?: string;
+  reasonMetadata?: Record<string, unknown>;
+  severity?: number;
+}

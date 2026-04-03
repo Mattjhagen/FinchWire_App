@@ -16,7 +16,8 @@ import { colors, spacing, typography, borderRadius } from '../../src/utils/theme
 import { useAuthStore } from '../../src/store/authStore';
 import { useSettingsStore } from '../../src/store/settingsStore';
 import { apiService } from '../../src/services/api';
-import { AiProvider, TtsProvider } from '../../src/types';
+import { pushNotificationsService } from '../../src/services/pushNotifications';
+import { AiProvider, NotificationPreferences, TtsProvider } from '../../src/types';
 
 const AI_PROVIDER_OPTIONS: { label: string; value: AiProvider }[] = [
   { label: 'None', value: 'none' },
@@ -32,6 +33,19 @@ const TTS_PROVIDER_OPTIONS: { label: string; value: TtsProvider }[] = [
   { label: 'OpenAI', value: 'openai' },
   { label: 'ElevenLabs', value: 'elevenlabs' },
 ];
+
+const DEFAULT_NOTIFICATION_PREFS: NotificationPreferences = {
+  enabled: true,
+  breakingStory: true,
+  risingStory: true,
+  creatorLive: true,
+  creatorUpload: true,
+  quietHoursStart: null,
+  quietHoursEnd: null,
+  minSeverity: 20,
+  dailyCap: 12,
+  personalizedOnly: false,
+};
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -53,6 +67,10 @@ export default function SettingsScreen() {
   const [hasAiApiKey, setHasAiApiKey] = React.useState(Boolean(settings?.has_ai_api_key));
   const [hasTtsApiKey, setHasTtsApiKey] = React.useState(Boolean(settings?.has_tts_api_key));
   const [isSavingProviders, setIsSavingProviders] = React.useState(false);
+  const [notificationPrefs, setNotificationPrefs] = React.useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFS);
+  const [isSavingNotificationPrefs, setIsSavingNotificationPrefs] = React.useState(false);
+  const [isRegisteringPush, setIsRegisteringPush] = React.useState(false);
+  const [pushToken, setPushToken] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!settings) return;
@@ -67,12 +85,18 @@ export default function SettingsScreen() {
     let isMounted = true;
     const loadServerSettings = async () => {
       try {
-        const serverSettings = await apiService.getServerSettings();
+        const [serverSettings, prefs, storedPushToken] = await Promise.all([
+          apiService.getServerSettings(),
+          apiService.getNotificationPreferences().catch(() => DEFAULT_NOTIFICATION_PREFS),
+          pushNotificationsService.getStoredPushToken(),
+        ]);
         if (!isMounted) return;
         setAiProvider(serverSettings.ai_provider);
         setTtsProvider(serverSettings.tts_provider);
         setHasAiApiKey(serverSettings.has_ai_api_key);
         setHasTtsApiKey(serverSettings.has_tts_api_key);
+        setNotificationPrefs({ ...DEFAULT_NOTIFICATION_PREFS, ...prefs });
+        setPushToken(storedPushToken);
       } catch {
         // Non-blocking: keep local settings fallback.
       }
@@ -193,6 +217,58 @@ export default function SettingsScreen() {
       Alert.alert('Cleared', `${kind.toUpperCase()} key removed from server.`);
     } catch (error: any) {
       Alert.alert('Clear failed', error?.message || 'Could not clear key.');
+    }
+  };
+
+  const updateNotificationField = <K extends keyof NotificationPreferences>(
+    key: K,
+    value: NotificationPreferences[K]
+  ) => {
+    setNotificationPrefs((current) => ({ ...current, [key]: value }));
+  };
+
+  const handleSaveNotificationPrefs = async () => {
+    setIsSavingNotificationPrefs(true);
+    try {
+      const updated = await apiService.updateNotificationPreferences(notificationPrefs);
+      setNotificationPrefs({ ...DEFAULT_NOTIFICATION_PREFS, ...updated });
+      Alert.alert('Saved', 'Notification preferences updated.');
+    } catch (error: any) {
+      Alert.alert('Save failed', error?.message || 'Could not save notification settings.');
+    } finally {
+      setIsSavingNotificationPrefs(false);
+    }
+  };
+
+  const handleRegisterPush = async () => {
+    setIsRegisteringPush(true);
+    try {
+      const token = await pushNotificationsService.registerDeviceForPush();
+      if (!token) {
+        throw new Error('Could not register push token.');
+      }
+      await apiService.subscribePushToken(token);
+      setPushToken(token);
+      Alert.alert('Push enabled', 'This device is now subscribed for FinchWire alerts.');
+    } catch (error: any) {
+      Alert.alert('Push setup failed', error?.message || 'Could not enable push notifications.');
+    } finally {
+      setIsRegisteringPush(false);
+    }
+  };
+
+  const handleUnregisterPush = async () => {
+    if (!pushToken) {
+      Alert.alert('No token', 'No registered push token is stored on this device.');
+      return;
+    }
+    try {
+      await apiService.unsubscribePushToken(pushToken);
+      await pushNotificationsService.clearStoredPushToken();
+      setPushToken(null);
+      Alert.alert('Push disabled', 'This device is unsubscribed from push alerts.');
+    } catch (error: any) {
+      Alert.alert('Disable failed', error?.message || 'Could not disable push notifications.');
     }
   };
 
@@ -426,6 +502,143 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Alerts + Notifications</Text>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <Ionicons name="notifications-outline" size={24} color={colors.primary} />
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Device Push Token</Text>
+              <Text style={styles.rowDescription}>
+                {pushToken ? 'Registered on this device' : 'Not registered'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={[styles.primaryActionButton, styles.compactButton, isRegisteringPush && styles.buttonDisabled]}
+              onPress={handleRegisterPush}
+              disabled={isRegisteringPush}
+            >
+              <Text style={styles.primaryActionText}>
+                {isRegisteringPush ? 'Registering...' : 'Enable Push'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryActionButton, styles.compactButton]}
+              onPress={handleUnregisterPush}
+            >
+              <Text style={styles.secondaryActionText}>Disable Push</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Master Alerts</Text>
+            <Switch
+              value={Boolean(notificationPrefs.enabled)}
+              onValueChange={(value) => updateNotificationField('enabled', value)}
+              trackColor={{ false: colors.surface, true: colors.primaryLight }}
+              thumbColor={notificationPrefs.enabled ? colors.primary : colors.textTertiary}
+            />
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Breaking Stories</Text>
+            <Switch
+              value={Boolean(notificationPrefs.breakingStory)}
+              onValueChange={(value) => updateNotificationField('breakingStory', value)}
+              trackColor={{ false: colors.surface, true: colors.primaryLight }}
+              thumbColor={notificationPrefs.breakingStory ? colors.primary : colors.textTertiary}
+            />
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Rising Stories</Text>
+            <Switch
+              value={Boolean(notificationPrefs.risingStory)}
+              onValueChange={(value) => updateNotificationField('risingStory', value)}
+              trackColor={{ false: colors.surface, true: colors.primaryLight }}
+              thumbColor={notificationPrefs.risingStory ? colors.primary : colors.textTertiary}
+            />
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Favorite Creator Live</Text>
+            <Switch
+              value={Boolean(notificationPrefs.creatorLive)}
+              onValueChange={(value) => updateNotificationField('creatorLive', value)}
+              trackColor={{ false: colors.surface, true: colors.primaryLight }}
+              thumbColor={notificationPrefs.creatorLive ? colors.primary : colors.textTertiary}
+            />
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Favorite Creator Uploads</Text>
+            <Switch
+              value={Boolean(notificationPrefs.creatorUpload)}
+              onValueChange={(value) => updateNotificationField('creatorUpload', value)}
+              trackColor={{ false: colors.surface, true: colors.primaryLight }}
+              thumbColor={notificationPrefs.creatorUpload ? colors.primary : colors.textTertiary}
+            />
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Only Highly Relevant</Text>
+            <Switch
+              value={Boolean(notificationPrefs.personalizedOnly)}
+              onValueChange={(value) => updateNotificationField('personalizedOnly', value)}
+              trackColor={{ false: colors.surface, true: colors.primaryLight }}
+              thumbColor={notificationPrefs.personalizedOnly ? colors.primary : colors.textTertiary}
+            />
+          </View>
+
+          <Text style={styles.inlineLabel}>Quiet Hours Start (HH:MM)</Text>
+          <TextInput
+            style={styles.textInput}
+            value={String(notificationPrefs.quietHoursStart || '')}
+            onChangeText={(value) => updateNotificationField('quietHoursStart', value || null)}
+            autoCapitalize="none"
+            placeholder="22:00"
+            placeholderTextColor={colors.textTertiary}
+          />
+          <Text style={styles.inlineLabel}>Quiet Hours End (HH:MM)</Text>
+          <TextInput
+            style={styles.textInput}
+            value={String(notificationPrefs.quietHoursEnd || '')}
+            onChangeText={(value) => updateNotificationField('quietHoursEnd', value || null)}
+            autoCapitalize="none"
+            placeholder="07:00"
+            placeholderTextColor={colors.textTertiary}
+          />
+          <Text style={styles.inlineLabel}>Minimum Severity (0-100)</Text>
+          <TextInput
+            style={styles.textInput}
+            value={String(notificationPrefs.minSeverity ?? 20)}
+            onChangeText={(value) => updateNotificationField('minSeverity', Number(value) || 0)}
+            keyboardType="numeric"
+            placeholder="20"
+            placeholderTextColor={colors.textTertiary}
+          />
+          <Text style={styles.inlineLabel}>Daily Notification Cap</Text>
+          <TextInput
+            style={styles.textInput}
+            value={String(notificationPrefs.dailyCap ?? 12)}
+            onChangeText={(value) => updateNotificationField('dailyCap', Number(value) || 0)}
+            keyboardType="numeric"
+            placeholder="12"
+            placeholderTextColor={colors.textTertiary}
+          />
+
+          <TouchableOpacity
+            style={[styles.primaryActionButton, isSavingNotificationPrefs && styles.buttonDisabled]}
+            onPress={handleSaveNotificationPrefs}
+            disabled={isSavingNotificationPrefs}
+          >
+            <Text style={styles.primaryActionText}>
+              {isSavingNotificationPrefs ? 'Saving...' : 'Save Notification Settings'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Downloads</Text>
         <View style={styles.card}>
           <View style={styles.row}>
@@ -557,6 +770,29 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     fontWeight: '700',
     color: colors.buttonText,
+  },
+  secondaryActionButton: {
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  secondaryActionText: {
+    ...typography.bodySmall,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  compactButton: {
+    flex: 1,
+    marginTop: spacing.sm,
   },
   buttonDisabled: {
     opacity: 0.6,

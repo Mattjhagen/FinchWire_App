@@ -2,11 +2,20 @@
 import { API_ENDPOINTS } from '../utils/constants';
 import {
   AiProvider,
+  CreatorEvent,
+  CreatorWatch,
+  CreatorWatchPayload,
+  FinchNotification,
+  InterestProfileResponse,
+  LiveStory,
   MediaJob,
+  NotificationPreferences,
+  NotificationPreferencesPayload,
   DownloadJobRequest,
   AuthResponse,
   SessionResponse,
   ServerRuntimeSettings,
+  StoryFeedbackPayload,
   TtsProvider,
 } from '../types';
 import { Platform } from 'react-native';
@@ -27,6 +36,31 @@ interface ShareUrlResponse {
   success: boolean;
   media_url: string;
   share_url: string;
+}
+
+interface StoriesResponse {
+  success: boolean;
+  stories: LiveStory[];
+}
+
+interface NotificationsResponse {
+  success: boolean;
+  notifications: FinchNotification[];
+}
+
+interface NotificationPreferencesResponse {
+  success: boolean;
+  preferences: NotificationPreferences;
+}
+
+interface CreatorWatchesResponse {
+  success: boolean;
+  watches: CreatorWatch[];
+}
+
+interface CreatorEventsResponse {
+  success: boolean;
+  events: CreatorEvent[];
 }
 
 class ApiService {
@@ -306,6 +340,112 @@ class ApiService {
       return this.baseUrl;
     }
     return this.getExternalMediaUrl(fallbackPath);
+  }
+
+  async getLiveStories(limit: number = 50): Promise<LiveStory[]> {
+    const response = await this.request<StoriesResponse>(`${API_ENDPOINTS.LIVE_STORIES}?limit=${limit}`);
+    return response.stories || [];
+  }
+
+  async getTrendingStories(limit: number = 30): Promise<LiveStory[]> {
+    const response = await this.request<StoriesResponse>(`${API_ENDPOINTS.LIVE_STORIES_TRENDING}?limit=${limit}`);
+    return response.stories || [];
+  }
+
+  async refreshStorySignals(): Promise<{ success: boolean; stats?: Record<string, unknown> }> {
+    return this.request<{ success: boolean; stats?: Record<string, unknown> }>(API_ENDPOINTS.LIVE_STORIES_REFRESH, {
+      method: 'POST',
+    });
+  }
+
+  async getMyInterests(): Promise<InterestProfileResponse> {
+    return this.request<InterestProfileResponse>(API_ENDPOINTS.INTERESTS_ME);
+  }
+
+  async sendInterestFeedback(payload: StoryFeedbackPayload): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(API_ENDPOINTS.INTERESTS_FEEDBACK, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getCreatorWatches(): Promise<CreatorWatch[]> {
+    const response = await this.request<CreatorWatchesResponse>(API_ENDPOINTS.CREATOR_WATCHES);
+    return response.watches || [];
+  }
+
+  async upsertCreatorWatch(payload: CreatorWatchPayload): Promise<CreatorWatch> {
+    const response = await this.request<{ success: boolean; watch: CreatorWatch }>(API_ENDPOINTS.CREATOR_WATCHES, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return response.watch;
+  }
+
+  async deleteCreatorWatch(watchId: string): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(`${API_ENDPOINTS.CREATOR_WATCHES}/${watchId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getCreatorEvents(limit: number = 100): Promise<CreatorEvent[]> {
+    const response = await this.request<CreatorEventsResponse>(`${API_ENDPOINTS.CREATOR_EVENTS}?limit=${limit}`);
+    return response.events || [];
+  }
+
+  async subscribePushToken(
+    expoPushToken: string,
+    platform: string = Platform.OS,
+    deviceId?: string
+  ): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(API_ENDPOINTS.PUSH_SUBSCRIBE, {
+      method: 'POST',
+      body: JSON.stringify({
+        expo_push_token: expoPushToken,
+        platform,
+        device_id: deviceId,
+        enabled: true,
+      }),
+    });
+  }
+
+  async unsubscribePushToken(expoPushToken: string): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(
+      `${API_ENDPOINTS.PUSH_UNSUBSCRIBE}?token=${encodeURIComponent(expoPushToken)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+  }
+
+  async getNotificationPreferences(): Promise<NotificationPreferences> {
+    const response = await this.request<NotificationPreferencesResponse>(API_ENDPOINTS.NOTIFICATION_PREFERENCES);
+    return response.preferences;
+  }
+
+  async updateNotificationPreferences(payload: NotificationPreferencesPayload): Promise<NotificationPreferences> {
+    const response = await this.request<NotificationPreferencesResponse>(API_ENDPOINTS.NOTIFICATION_PREFERENCES, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return response.preferences;
+  }
+
+  async getNotifications(limit: number = 100): Promise<FinchNotification[]> {
+    const response = await this.request<NotificationsResponse>(`${API_ENDPOINTS.NOTIFICATIONS}?limit=${limit}`);
+    return response.notifications || [];
+  }
+
+  async markNotificationOpened(notificationId: string): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(`${API_ENDPOINTS.NOTIFICATIONS}/${notificationId}/open`, {
+      method: 'PATCH',
+    });
+  }
+
+  async runAlertCycle(): Promise<{ success: boolean; stats?: Record<string, unknown> }> {
+    return this.request<{ success: boolean; stats?: Record<string, unknown> }>(API_ENDPOINTS.ALERT_CYCLE, {
+      method: 'POST',
+    });
   }
 
   // Build media URLs

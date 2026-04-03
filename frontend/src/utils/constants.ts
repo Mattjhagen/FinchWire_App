@@ -19,6 +19,18 @@ export const API_ENDPOINTS = {
   DOWNLOAD_KEEP: '/api/downloads',
   FILES: '/api/files',
   EVENTS: '/api/events',
+  LIVE_STORIES: '/api/live/stories',
+  LIVE_STORIES_TRENDING: '/api/live/stories/trending',
+  LIVE_STORIES_REFRESH: '/api/live/stories/refresh',
+  INTERESTS_ME: '/api/interests/me',
+  INTERESTS_FEEDBACK: '/api/interests/feedback',
+  CREATOR_WATCHES: '/api/creators/watches',
+  CREATOR_EVENTS: '/api/creators/events',
+  PUSH_SUBSCRIBE: '/api/push/subscribe',
+  PUSH_UNSUBSCRIBE: '/api/push/unsubscribe',
+  NOTIFICATIONS: '/api/notifications',
+  NOTIFICATION_PREFERENCES: '/api/notifications/preferences',
+  ALERT_CYCLE: '/api/jobs/run-alert-cycle',
 };
 
 export const MEDIA_TYPES = {
