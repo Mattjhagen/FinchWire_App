@@ -23,9 +23,8 @@ import { DEFAULT_BACKEND_URL, DEFAULT_RETENTION_DAYS } from '../src/utils/consta
 export default function SetupScreen() {
   const router = useRouter();
   const { saveSettings } = useSettingsStore();
-  const { markSetupComplete, setAuthToken } = useAuthStore();
+  const { markSetupComplete } = useAuthStore();
   const [backendUrl, setBackendUrl] = useState(DEFAULT_BACKEND_URL);
-  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
@@ -54,7 +53,7 @@ export default function SetupScreen() {
       }
 
       await completeSetup(backendUrl.trim());
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to save settings');
     } finally {
       setIsLoading(false);
@@ -68,10 +67,25 @@ export default function SetupScreen() {
       retention_days: DEFAULT_RETENTION_DAYS,
       wifi_only: false,
       auto_delete: false,
+      app_lock_enabled: false,
+      app_lock_biometrics: false,
+      app_lock_timeout: '1m',
       ai_provider: 'none',
       tts_provider: 'none',
       has_ai_api_key: false,
       has_tts_api_key: false,
+      home_market_symbol: 'BTC',
+      home_market_asset_type: 'crypto',
+      home_weather_unit: 'f',
+      home_tiles: {
+        weather: true,
+        market: true,
+        verse: true,
+        order: ['weather', 'market', 'verse'],
+      },
+      followed_topics: [],
+      followed_sources: [],
+      followed_creators: [],
     });
 
     await markSetupComplete();

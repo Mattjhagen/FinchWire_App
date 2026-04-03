@@ -14,10 +14,13 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, borderRadius } from '../../src/utils/theme';
 import { useAuthStore } from '../../src/store/authStore';
+import { useAppLockStore } from '../../src/store/appLockStore';
 import { useSettingsStore } from '../../src/store/settingsStore';
 import { apiService } from '../../src/services/api';
+import { appLockService } from '../../src/services/appLockService';
 import { pushNotificationsService } from '../../src/services/pushNotifications';
-import { AiProvider, NotificationPreferences, TtsProvider } from '../../src/types';
+import { APP_LOCK_TIMEOUT_OPTIONS } from '../../src/features/app-lock/policy';
+import { AiProvider, AppLockTimeout, AssetType, NotificationPreferences, TtsProvider } from '../../src/types';
 
 const AI_PROVIDER_OPTIONS: { label: string; value: AiProvider }[] = [
   { label: 'None', value: 'none' },
@@ -47,9 +50,19 @@ const DEFAULT_NOTIFICATION_PREFS: NotificationPreferences = {
   personalizedOnly: false,
 };
 
+const HOME_MARKET_CHOICES: { symbol: string; assetType: AssetType; label: string }[] = [
+  { symbol: 'BTC', assetType: 'crypto', label: 'BTC (Crypto)' },
+  { symbol: 'ETH', assetType: 'crypto', label: 'ETH (Crypto)' },
+  { symbol: 'SOL', assetType: 'crypto', label: 'SOL (Crypto)' },
+  { symbol: 'TSLA', assetType: 'stock', label: 'TSLA (Stock)' },
+  { symbol: 'NVDA', assetType: 'stock', label: 'NVDA (Stock)' },
+  { symbol: 'SPY', assetType: 'stock', label: 'SPY (ETF)' },
+];
+
 export default function SettingsScreen() {
   const router = useRouter();
   const { clearAuth, setAuthToken } = useAuthStore();
+  const { setHasPin: setGlobalHasPin, setLocked } = useAppLockStore();
   const { settings, saveSettings } = useSettingsStore();
 
   const [isEditingUrl, setIsEditingUrl] = React.useState(false);
@@ -71,6 +84,15 @@ export default function SettingsScreen() {
   const [isSavingNotificationPrefs, setIsSavingNotificationPrefs] = React.useState(false);
   const [isRegisteringPush, setIsRegisteringPush] = React.useState(false);
   const [pushToken, setPushToken] = React.useState<string | null>(null);
+  const [hasAppLockPin, setHasAppLockPin] = React.useState(false);
+  const [appLockError, setAppLockError] = React.useState<string | null>(null);
+  const [isAppLockBusy, setIsAppLockBusy] = React.useState(false);
+  const [pinFlow, setPinFlow] = React.useState<'none' | 'setup' | 'change' | 'verify-disable'>('none');
+  const [pendingEnableAfterPinSetup, setPendingEnableAfterPinSetup] = React.useState(false);
+  const [currentPinInput, setCurrentPinInput] = React.useState('');
+  const [newPinInput, setNewPinInput] = React.useState('');
+  const [confirmPinInput, setConfirmPinInput] = React.useState('');
+  const [biometricSummary, setBiometricSummary] = React.useState('Checking biometric support...');
 
   React.useEffect(() => {
     if (!settings) return;
@@ -80,6 +102,45 @@ export default function SettingsScreen() {
     setHasAiApiKey(Boolean(settings.has_ai_api_key));
     setHasTtsApiKey(Boolean(settings.has_tts_api_key));
   }, [settings]);
+
+  const resetPinFlowState = React.useCallback(() => {
+    setPinFlow('none');
+    setPendingEnableAfterPinSetup(false);
+    setCurrentPinInput('');
+    setNewPinInput('');
+    setConfirmPinInput('');
+    setAppLockError(null);
+  }, []);
+
+  const refreshAppLockStatus = React.useCallback(async () => {
+    try {
+      const [pinExists, biometricStatus] = await Promise.all([
+        appLockService.hasPin(),
+        appLockService.getBiometricStatus().catch(() => ({
+          available: false,
+          enrolled: false,
+          authenticationTypes: [],
+        })),
+      ]);
+
+      setHasAppLockPin(pinExists);
+      setGlobalHasPin(pinExists);
+
+      if (!biometricStatus.available) {
+        setBiometricSummary('Biometrics unavailable on this device');
+      } else if (!biometricStatus.enrolled) {
+        setBiometricSummary('Biometrics available but not enrolled');
+      } else {
+        setBiometricSummary('Biometrics ready');
+      }
+    } catch {
+      setBiometricSummary('Biometric status unavailable');
+    }
+  }, [setGlobalHasPin]);
+
+  React.useEffect(() => {
+    void refreshAppLockStatus();
+  }, [refreshAppLockStatus]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -303,6 +364,227 @@ export default function SettingsScreen() {
     }
   };
 
+  const toggleHomeTile = async (tile: 'weather' | 'market' | 'verse', value: boolean) => {
+    if (!settings) return;
+    await saveSettings({
+      ...settings,
+      home_tiles: {
+        ...settings.home_tiles,
+        [tile]: value,
+      },
+    });
+  };
+
+  const updateHomeWeatherUnit = async (unit: 'f' | 'c') => {
+    if (!settings) return;
+    await saveSettings({
+      ...settings,
+      home_weather_unit: unit,
+    });
+  };
+
+  const updateTrackedAsset = async (symbol: string, assetType: AssetType) => {
+    if (!settings) return;
+    await saveSettings({
+      ...settings,
+      home_market_symbol: symbol,
+      home_market_asset_type: assetType,
+    });
+  };
+
+  const removeFollow = async (field: 'followed_topics' | 'followed_sources' | 'followed_creators', value: string) => {
+    if (!settings) return;
+    await saveSettings({
+      ...settings,
+      [field]: (settings[field] || []).filter((entry) => entry !== value),
+    });
+  };
+
+  const updateAppLockTimeout = async (timeout: AppLockTimeout) => {
+    if (!settings) return;
+    await saveSettings({
+      ...settings,
+      app_lock_timeout: timeout,
+    });
+  };
+
+  const applyDisableAppLock = async () => {
+    if (!settings) return;
+    await saveSettings({
+      ...settings,
+      app_lock_enabled: false,
+      app_lock_biometrics: false,
+    });
+    setLocked(false);
+    resetPinFlowState();
+  };
+
+  const startDisableFlow = async () => {
+    if (!settings) return;
+    setAppLockError(null);
+
+    if (settings.app_lock_biometrics) {
+      try {
+        const biometricResult = await appLockService.authenticateWithBiometrics('Disable FinchWire App Lock');
+        if (biometricResult.success) {
+          await applyDisableAppLock();
+          Alert.alert('App Lock disabled', 'FinchWire no longer requires unlock on this device.');
+          return;
+        }
+      } catch {
+        // Fall through to PIN verification.
+      }
+    }
+
+    setPinFlow('verify-disable');
+  };
+
+  const handleToggleAppLockEnabled = async (value: boolean) => {
+    if (!settings) return;
+    if (value) {
+      if (!hasAppLockPin) {
+        setPendingEnableAfterPinSetup(true);
+        setPinFlow('setup');
+        setAppLockError(null);
+        Alert.alert('Create PIN first', 'Set a 4-6 digit PIN before enabling App Lock.');
+        return;
+      }
+      await saveSettings({
+        ...settings,
+        app_lock_enabled: true,
+      });
+      setLocked(false); // keep current active session unlocked
+      Alert.alert('App Lock enabled', 'FinchWire will require unlock on next lock event.');
+      return;
+    }
+    await startDisableFlow();
+  };
+
+  const handleToggleBiometrics = async (value: boolean) => {
+    if (!settings) return;
+    setAppLockError(null);
+
+    if (!value) {
+      await saveSettings({
+        ...settings,
+        app_lock_biometrics: false,
+      });
+      return;
+    }
+
+    if (!hasAppLockPin) {
+      setPinFlow('setup');
+      Alert.alert('PIN required', 'Create a PIN first. Biometrics always requires PIN fallback.');
+      return;
+    }
+
+    const biometricStatus = await appLockService.getBiometricStatus().catch(() => null);
+    if (!biometricStatus?.available) {
+      Alert.alert('Biometrics unavailable', 'This device does not support biometric unlock.');
+      return;
+    }
+    if (!biometricStatus.enrolled) {
+      Alert.alert('No biometrics enrolled', 'Enroll Face ID or fingerprint on this device, then try again.');
+      return;
+    }
+
+    await saveSettings({
+      ...settings,
+      app_lock_biometrics: true,
+    });
+  };
+
+  const handlePinSetup = async () => {
+    const nextPin = newPinInput.trim();
+    const confirmPin = confirmPinInput.trim();
+    const validation = appLockService.validatePin(nextPin);
+    if (!validation.valid) {
+      setAppLockError(validation.error || 'Invalid PIN.');
+      return;
+    }
+    if (validation.normalized !== appLockService.validatePin(confirmPin).normalized) {
+      setAppLockError('PIN confirmation does not match.');
+      return;
+    }
+
+    setIsAppLockBusy(true);
+    try {
+      await appLockService.setPin(validation.normalized);
+      setHasAppLockPin(true);
+      setGlobalHasPin(true);
+
+      if (pendingEnableAfterPinSetup && settings) {
+        await saveSettings({
+          ...settings,
+          app_lock_enabled: true,
+        });
+      }
+
+      resetPinFlowState();
+      Alert.alert('PIN saved', pendingEnableAfterPinSetup ? 'App Lock is now enabled.' : 'PIN fallback is ready.');
+    } catch {
+      setAppLockError('Could not save PIN securely on this device.');
+    } finally {
+      setIsAppLockBusy(false);
+    }
+  };
+
+  const handlePinChange = async () => {
+    const currentValidation = appLockService.validatePin(currentPinInput.trim());
+    if (!currentValidation.valid) {
+      setAppLockError('Enter your current PIN.');
+      return;
+    }
+
+    const newValidation = appLockService.validatePin(newPinInput.trim());
+    if (!newValidation.valid) {
+      setAppLockError(newValidation.error || 'New PIN is invalid.');
+      return;
+    }
+    if (newValidation.normalized !== appLockService.validatePin(confirmPinInput.trim()).normalized) {
+      setAppLockError('New PIN confirmation does not match.');
+      return;
+    }
+
+    setIsAppLockBusy(true);
+    try {
+      const isCurrentValid = await appLockService.verifyPin(currentValidation.normalized);
+      if (!isCurrentValid) {
+        setAppLockError('Current PIN is incorrect.');
+        return;
+      }
+      await appLockService.setPin(newValidation.normalized);
+      resetPinFlowState();
+      Alert.alert('PIN updated', 'Your App Lock PIN has been changed.');
+    } catch {
+      setAppLockError('Unable to change PIN right now.');
+    } finally {
+      setIsAppLockBusy(false);
+    }
+  };
+
+  const handleDisableViaPin = async () => {
+    const validation = appLockService.validatePin(currentPinInput.trim());
+    if (!validation.valid) {
+      setAppLockError('Enter your PIN to disable App Lock.');
+      return;
+    }
+    setIsAppLockBusy(true);
+    try {
+      const isValid = await appLockService.verifyPin(validation.normalized);
+      if (!isValid) {
+        setAppLockError('Incorrect PIN.');
+        return;
+      }
+      await applyDisableAppLock();
+      Alert.alert('App Lock disabled', 'FinchWire no longer requires unlock on this device.');
+    } catch {
+      setAppLockError('Unable to verify PIN right now.');
+    } finally {
+      setIsAppLockBusy(false);
+    }
+  };
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.section}>
@@ -337,6 +619,321 @@ export default function SettingsScreen() {
               )}
             </View>
           </View>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Home Dashboard</Text>
+        <View style={styles.card}>
+          <Text style={styles.inlineLabel}>Smart Tiles</Text>
+          <View style={styles.row}>
+            <View style={styles.rowContentNoIcon}>
+              <Text style={styles.rowLabel}>Weather Tile</Text>
+              <Text style={styles.rowDescription}>Current temp + condition.</Text>
+            </View>
+            <Switch
+              value={Boolean(settings?.home_tiles?.weather)}
+              onValueChange={(value) => toggleHomeTile('weather', value)}
+              trackColor={{ false: colors.surface, true: colors.primaryLight }}
+              thumbColor={settings?.home_tiles?.weather ? colors.primary : colors.textTertiary}
+            />
+          </View>
+          <View style={styles.row}>
+            <View style={styles.rowContentNoIcon}>
+              <Text style={styles.rowLabel}>Market Tile</Text>
+              <Text style={styles.rowDescription}>Track one stock/crypto on Home.</Text>
+            </View>
+            <Switch
+              value={Boolean(settings?.home_tiles?.market)}
+              onValueChange={(value) => toggleHomeTile('market', value)}
+              trackColor={{ false: colors.surface, true: colors.primaryLight }}
+              thumbColor={settings?.home_tiles?.market ? colors.primary : colors.textTertiary}
+            />
+          </View>
+          <View style={styles.row}>
+            <View style={styles.rowContentNoIcon}>
+              <Text style={styles.rowLabel}>Verse Tile</Text>
+              <Text style={styles.rowDescription}>Daily Bible verse signal tile.</Text>
+            </View>
+            <Switch
+              value={Boolean(settings?.home_tiles?.verse)}
+              onValueChange={(value) => toggleHomeTile('verse', value)}
+              trackColor={{ false: colors.surface, true: colors.primaryLight }}
+              thumbColor={settings?.home_tiles?.verse ? colors.primary : colors.textTertiary}
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          <Text style={styles.inlineLabel}>Temperature Unit</Text>
+          <View style={styles.chipWrap}>
+            <TouchableOpacity
+              style={[
+                styles.providerChip,
+                settings?.home_weather_unit === 'f' && styles.providerChipActive,
+              ]}
+              onPress={() => updateHomeWeatherUnit('f')}
+            >
+              <Text
+                style={[
+                  styles.providerChipText,
+                  settings?.home_weather_unit === 'f' && styles.providerChipTextActive,
+                ]}
+              >
+                Fahrenheit (°F)
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.providerChip,
+                settings?.home_weather_unit === 'c' && styles.providerChipActive,
+              ]}
+              onPress={() => updateHomeWeatherUnit('c')}
+            >
+              <Text
+                style={[
+                  styles.providerChipText,
+                  settings?.home_weather_unit === 'c' && styles.providerChipTextActive,
+                ]}
+              >
+                Celsius (°C)
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.inlineLabel}>Tracked Market Asset</Text>
+          <View style={styles.chipWrap}>
+            {HOME_MARKET_CHOICES.map((choice) => {
+              const active = settings?.home_market_symbol === choice.symbol
+                && settings?.home_market_asset_type === choice.assetType;
+              return (
+                <TouchableOpacity
+                  key={`${choice.symbol}-${choice.assetType}`}
+                  style={[styles.providerChip, active && styles.providerChipActive]}
+                  onPress={() => updateTrackedAsset(choice.symbol, choice.assetType)}
+                >
+                  <Text style={[styles.providerChipText, active && styles.providerChipTextActive]}>
+                    {choice.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={styles.inlineLabel}>Followed Topics</Text>
+          <View style={styles.chipWrap}>
+            {(settings?.followed_topics || []).map((topic) => (
+              <TouchableOpacity
+                key={`topic-${topic}`}
+                style={styles.removeChip}
+                onPress={() => removeFollow('followed_topics', topic)}
+              >
+                <Text style={styles.removeChipText}>#{topic} ✕</Text>
+              </TouchableOpacity>
+            ))}
+            {(settings?.followed_topics || []).length === 0 ? (
+              <Text style={styles.rowDescription}>No topics followed yet.</Text>
+            ) : null}
+          </View>
+
+          <Text style={styles.inlineLabel}>Followed Sources</Text>
+          <View style={styles.chipWrap}>
+            {(settings?.followed_sources || []).map((source) => (
+              <TouchableOpacity
+                key={`source-${source}`}
+                style={styles.removeChip}
+                onPress={() => removeFollow('followed_sources', source)}
+              >
+                <Text style={styles.removeChipText}>{source} ✕</Text>
+              </TouchableOpacity>
+            ))}
+            {(settings?.followed_sources || []).length === 0 ? (
+              <Text style={styles.rowDescription}>No sources followed yet.</Text>
+            ) : null}
+          </View>
+
+          <Text style={styles.inlineLabel}>Followed Creators</Text>
+          <View style={styles.chipWrap}>
+            {(settings?.followed_creators || []).map((creator) => (
+              <TouchableOpacity
+                key={`creator-${creator}`}
+                style={styles.removeChip}
+                onPress={() => removeFollow('followed_creators', creator)}
+              >
+                <Text style={styles.removeChipText}>{creator} ✕</Text>
+              </TouchableOpacity>
+            ))}
+            {(settings?.followed_creators || []).length === 0 ? (
+              <Text style={styles.rowDescription}>No creators followed yet.</Text>
+            ) : null}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>App Lock</Text>
+        <View style={styles.card}>
+          <Text style={styles.rowDescription}>
+            Optional local device protection. Disabled by default.
+          </Text>
+
+          <View style={styles.row}>
+            <View style={styles.rowContentNoIcon}>
+              <Text style={styles.rowLabel}>Enable App Lock</Text>
+              <Text style={styles.rowDescription}>Require unlock on app start/return.</Text>
+            </View>
+            <Switch
+              value={Boolean(settings?.app_lock_enabled)}
+              onValueChange={handleToggleAppLockEnabled}
+              trackColor={{ false: colors.surface, true: colors.primaryLight }}
+              thumbColor={settings?.app_lock_enabled ? colors.primary : colors.textTertiary}
+            />
+          </View>
+
+          <View style={styles.row}>
+            <View style={styles.rowContentNoIcon}>
+              <Text style={styles.rowLabel}>Unlock with Biometrics</Text>
+              <Text style={styles.rowDescription}>
+                {biometricSummary}. PIN fallback always remains enabled.
+              </Text>
+            </View>
+            <Switch
+              value={Boolean(settings?.app_lock_biometrics)}
+              onValueChange={handleToggleBiometrics}
+              trackColor={{ false: colors.surface, true: colors.primaryLight }}
+              thumbColor={settings?.app_lock_biometrics ? colors.primary : colors.textTertiary}
+            />
+          </View>
+
+          <Text style={styles.inlineLabel}>Relock Timing</Text>
+          <View style={styles.chipWrap}>
+            {APP_LOCK_TIMEOUT_OPTIONS.map((option) => {
+              const active = settings?.app_lock_timeout === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.providerChip, active && styles.providerChipActive]}
+                  onPress={() => updateAppLockTimeout(option.value)}
+                >
+                  <Text style={[styles.providerChipText, active && styles.providerChipTextActive]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.appLockActions}>
+            {!hasAppLockPin ? (
+              <TouchableOpacity
+                style={[styles.secondaryActionButton, styles.compactButton]}
+                onPress={() => {
+                  setPinFlow('setup');
+                  setPendingEnableAfterPinSetup(false);
+                  setAppLockError(null);
+                }}
+              >
+                <Text style={styles.secondaryActionText}>Set PIN</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.secondaryActionButton, styles.compactButton]}
+              onPress={() => {
+                setPinFlow('change');
+                setAppLockError(null);
+              }}
+              disabled={!hasAppLockPin}
+            >
+              <Text style={styles.secondaryActionText}>Change PIN</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryActionButton, styles.compactButton]}
+              onPress={startDisableFlow}
+              disabled={!settings?.app_lock_enabled}
+            >
+              <Text style={styles.secondaryActionText}>Disable Lock</Text>
+            </TouchableOpacity>
+          </View>
+
+          {pinFlow !== 'none' ? (
+            <View style={styles.appLockPanel}>
+              <Text style={styles.inlineLabel}>
+                {pinFlow === 'setup'
+                  ? 'Set PIN (4-6 digits)'
+                  : pinFlow === 'change'
+                    ? 'Change PIN'
+                    : 'Verify PIN to Disable'}
+              </Text>
+
+              {(pinFlow === 'change' || pinFlow === 'verify-disable') ? (
+                <>
+                  <Text style={styles.inlineLabel}>Current PIN</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={currentPinInput}
+                    onChangeText={(value) => setCurrentPinInput(value.replace(/\D/g, '').slice(0, 6))}
+                    secureTextEntry
+                    keyboardType="number-pad"
+                    placeholder="Current PIN"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+                </>
+              ) : null}
+
+              {(pinFlow === 'setup' || pinFlow === 'change') ? (
+                <>
+                  <Text style={styles.inlineLabel}>New PIN</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={newPinInput}
+                    onChangeText={(value) => setNewPinInput(value.replace(/\D/g, '').slice(0, 6))}
+                    secureTextEntry
+                    keyboardType="number-pad"
+                    placeholder="4 to 6 digits"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+                  <Text style={styles.inlineLabel}>Confirm New PIN</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={confirmPinInput}
+                    onChangeText={(value) => setConfirmPinInput(value.replace(/\D/g, '').slice(0, 6))}
+                    secureTextEntry
+                    keyboardType="number-pad"
+                    placeholder="Re-enter PIN"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+                </>
+              ) : null}
+
+              {appLockError ? <Text style={styles.linkDanger}>{appLockError}</Text> : null}
+
+              <View style={styles.buttonRow}>
+                <TouchableOpacity
+                  style={[styles.primaryActionButton, styles.compactButton, isAppLockBusy && styles.buttonDisabled]}
+                  disabled={isAppLockBusy}
+                  onPress={() => {
+                    if (pinFlow === 'setup') {
+                      void handlePinSetup();
+                    } else if (pinFlow === 'change') {
+                      void handlePinChange();
+                    } else {
+                      void handleDisableViaPin();
+                    }
+                  }}
+                >
+                  <Text style={styles.primaryActionText}>
+                    {isAppLockBusy ? 'Working...' : pinFlow === 'verify-disable' ? 'Verify PIN' : 'Save PIN'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.secondaryActionButton, styles.compactButton]}
+                  onPress={resetPinFlowState}
+                >
+                  <Text style={styles.secondaryActionText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -729,6 +1326,10 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: spacing.md,
   },
+  rowContentNoIcon: {
+    flex: 1,
+    marginLeft: 0,
+  },
   rowLabel: {
     ...typography.body,
     fontWeight: '500',
@@ -790,6 +1391,20 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.xs,
   },
+  appLockActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  appLockPanel: {
+    marginTop: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    padding: spacing.sm,
+  },
   compactButton: {
     flex: 1,
     marginTop: spacing.sm,
@@ -850,6 +1465,19 @@ const styles = StyleSheet.create({
   },
   providerChipTextActive: {
     color: colors.buttonText,
+  },
+  removeChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  removeChipText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
   },
   statusRow: {
     flexDirection: 'row',

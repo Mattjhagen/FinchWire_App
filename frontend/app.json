@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Use Face ID to unlock FinchWire."
+      }
     },
     "android": {
       "package": "com.finchwire.app",
@@ -62,6 +65,7 @@
         }
       ],
       "expo-notifications",
+      "expo-local-authentication",
       "expo-router",
       [
         "expo-splash-screen",

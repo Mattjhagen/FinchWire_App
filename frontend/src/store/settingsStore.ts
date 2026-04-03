@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS, DEFAULT_BACKEND_URL, DEFAULT_RETENTION_DAYS } from '../utils/constants';
-import { AiProvider, AppSettings, TtsProvider } from '../types';
+import { AiProvider, AppLockTimeout, AppSettings, AssetType, HomeTileType, TemperatureUnit, TtsProvider } from '../types';
 
 interface SettingsState {
   settings: AppSettings | null;
@@ -15,6 +15,10 @@ interface SettingsState {
 
 const ALLOWED_AI_PROVIDERS: AiProvider[] = ['none', 'gemini', 'openai', 'anthropic', 'groq'];
 const ALLOWED_TTS_PROVIDERS: TtsProvider[] = ['none', 'gemini', 'openai', 'elevenlabs'];
+const ALLOWED_ASSET_TYPES: AssetType[] = ['stock', 'crypto'];
+const ALLOWED_TEMP_UNITS: TemperatureUnit[] = ['f', 'c'];
+const ALLOWED_APP_LOCK_TIMEOUTS: AppLockTimeout[] = ['immediate', '1m', '5m'];
+const DEFAULT_TILE_ORDER: HomeTileType[] = ['weather', 'market', 'verse'];
 
 const DEFAULT_SETTINGS: AppSettings = {
   backend_url: DEFAULT_BACKEND_URL,
@@ -22,10 +26,25 @@ const DEFAULT_SETTINGS: AppSettings = {
   retention_days: DEFAULT_RETENTION_DAYS,
   wifi_only: false,
   auto_delete: false,
+  app_lock_enabled: false,
+  app_lock_biometrics: false,
+  app_lock_timeout: '1m',
   ai_provider: 'none',
   tts_provider: 'none',
   has_ai_api_key: false,
   has_tts_api_key: false,
+  home_market_symbol: 'BTC',
+  home_market_asset_type: 'crypto',
+  home_weather_unit: 'f',
+  home_tiles: {
+    weather: true,
+    market: true,
+    verse: true,
+    order: DEFAULT_TILE_ORDER,
+  },
+  followed_topics: [],
+  followed_sources: [],
+  followed_creators: [],
 };
 
 const normalizeSettings = (input: Partial<AppSettings> | null | undefined): AppSettings => {
@@ -42,6 +61,37 @@ const normalizeSettings = (input: Partial<AppSettings> | null | undefined): AppS
   const ttsProvider = ALLOWED_TTS_PROVIDERS.includes(candidate.tts_provider as TtsProvider)
     ? (candidate.tts_provider as TtsProvider)
     : DEFAULT_SETTINGS.tts_provider;
+  const homeMarketAssetType = ALLOWED_ASSET_TYPES.includes(candidate.home_market_asset_type as AssetType)
+    ? (candidate.home_market_asset_type as AssetType)
+    : DEFAULT_SETTINGS.home_market_asset_type;
+  const homeWeatherUnit = ALLOWED_TEMP_UNITS.includes(candidate.home_weather_unit as TemperatureUnit)
+    ? (candidate.home_weather_unit as TemperatureUnit)
+    : DEFAULT_SETTINGS.home_weather_unit;
+  const appLockTimeout = ALLOWED_APP_LOCK_TIMEOUTS.includes(candidate.app_lock_timeout as AppLockTimeout)
+    ? (candidate.app_lock_timeout as AppLockTimeout)
+    : DEFAULT_SETTINGS.app_lock_timeout;
+
+  const candidateTiles = candidate.home_tiles && typeof candidate.home_tiles === 'object'
+    ? candidate.home_tiles
+    : DEFAULT_SETTINGS.home_tiles;
+  const orderCandidate = Array.isArray(candidateTiles.order)
+    ? candidateTiles.order.filter((item: string): item is HomeTileType => DEFAULT_TILE_ORDER.includes(item as HomeTileType))
+    : DEFAULT_TILE_ORDER;
+  const normalizedOrder: HomeTileType[] = [
+    ...new Set([...orderCandidate, ...DEFAULT_TILE_ORDER]),
+  ].filter((item): item is HomeTileType => DEFAULT_TILE_ORDER.includes(item as HomeTileType));
+
+  const normalizeFollowList = (value: unknown): string[] => {
+    if (!Array.isArray(value)) return [];
+    return Array.from(
+      new Set(
+        value
+          .map((entry) => String(entry || '').trim())
+          .filter((entry) => entry.length > 0)
+          .slice(0, 80)
+      )
+    );
+  };
 
   return {
     ...DEFAULT_SETTINGS,
@@ -51,10 +101,25 @@ const normalizeSettings = (input: Partial<AppSettings> | null | undefined): AppS
     retention_days: retentionDays,
     wifi_only: Boolean(candidate.wifi_only),
     auto_delete: Boolean(candidate.auto_delete),
+    app_lock_enabled: Boolean(candidate.app_lock_enabled),
+    app_lock_biometrics: Boolean(candidate.app_lock_biometrics),
+    app_lock_timeout: appLockTimeout,
     ai_provider: aiProvider,
     tts_provider: ttsProvider,
     has_ai_api_key: Boolean(candidate.has_ai_api_key),
     has_tts_api_key: Boolean(candidate.has_tts_api_key),
+    home_market_symbol: String(candidate.home_market_symbol || DEFAULT_SETTINGS.home_market_symbol).trim().toUpperCase(),
+    home_market_asset_type: homeMarketAssetType,
+    home_weather_unit: homeWeatherUnit,
+    home_tiles: {
+      weather: Boolean(candidateTiles.weather ?? DEFAULT_SETTINGS.home_tiles.weather),
+      market: Boolean(candidateTiles.market ?? DEFAULT_SETTINGS.home_tiles.market),
+      verse: Boolean(candidateTiles.verse ?? DEFAULT_SETTINGS.home_tiles.verse),
+      order: normalizedOrder,
+    },
+    followed_topics: normalizeFollowList(candidate.followed_topics),
+    followed_sources: normalizeFollowList(candidate.followed_sources),
+    followed_creators: normalizeFollowList(candidate.followed_creators),
   };
 };
 

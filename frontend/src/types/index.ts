@@ -57,10 +57,32 @@ export interface AppSettings {
   retention_days: number;
   wifi_only: boolean;
   auto_delete: boolean;
+  app_lock_enabled: boolean;
+  app_lock_biometrics: boolean;
+  app_lock_timeout: AppLockTimeout;
   ai_provider: AiProvider;
   tts_provider: TtsProvider;
   has_ai_api_key: boolean;
   has_tts_api_key: boolean;
+  home_market_symbol: string;
+  home_market_asset_type: AssetType;
+  home_weather_unit: TemperatureUnit;
+  home_tiles: HomeTilePreferences;
+  followed_topics: string[];
+  followed_sources: string[];
+  followed_creators: string[];
+}
+
+export type AssetType = 'stock' | 'crypto';
+export type TemperatureUnit = 'f' | 'c';
+export type HomeTileType = 'weather' | 'market' | 'verse';
+export type AppLockTimeout = 'immediate' | '1m' | '5m';
+
+export interface HomeTilePreferences {
+  weather: boolean;
+  market: boolean;
+  verse: boolean;
+  order: HomeTileType[];
 }
 
 export type AiProvider = 'none' | 'gemini' | 'openai' | 'anthropic' | 'groq';
@@ -71,6 +93,36 @@ export interface ServerRuntimeSettings {
   tts_provider: TtsProvider;
   has_ai_api_key: boolean;
   has_tts_api_key: boolean;
+}
+
+export interface WeatherSnapshot {
+  locationLabel: string;
+  temperatureC?: number;
+  temperatureF?: number;
+  condition?: string;
+  highC?: number;
+  lowC?: number;
+  highF?: number;
+  lowF?: number;
+  observedAt?: string;
+}
+
+export interface PriceWatchItem {
+  symbol: string;
+  assetType: AssetType;
+  displayName?: string;
+  price: number;
+  currency: string;
+  change24h?: number;
+  changePercent24h?: number;
+  updatedAt?: string;
+}
+
+export interface VerseOfDay {
+  reference: string;
+  text: string;
+  translation?: string;
+  fetchedAt?: string;
 }
 
 export interface AuthResponse {
@@ -106,11 +158,14 @@ export interface InterestProfileResponse {
 
 export interface StoryFeedbackPayload {
   interaction_type:
+    | 'story_impression'
     | 'story_opened'
     | 'story_clicked'
+    | 'story_dwell'
     | 'story_bookmarked'
     | 'story_liked'
     | 'topic_followed'
+    | 'source_followed'
     | 'creator_followed'
     | 'video_played'
     | 'video_downloaded'
@@ -126,6 +181,29 @@ export interface StoryFeedbackPayload {
   categories?: string[];
   creators?: string[];
   keywords?: string[];
+}
+
+export interface FeedInteractionEvent {
+  item_id: string;
+  item_type: 'article' | 'video' | 'story';
+  event_type:
+    | 'impression'
+    | 'open'
+    | 'click'
+    | 'dwell'
+    | 'follow_topic'
+    | 'follow_source'
+    | 'follow_creator'
+    | 'hide'
+    | 'save';
+  title?: string;
+  source?: string;
+  topics?: string[];
+  categories?: string[];
+  creators?: string[];
+  keywords?: string[];
+  value?: number;
+  occurred_at?: string;
 }
 
 export interface LiveStory {

@@ -3,14 +3,18 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
-import { Linking } from 'react-native';
+import { AppState, Linking } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import { useAuthStore } from '../src/store/authStore';
 import { useSettingsStore } from '../src/store/settingsStore';
+import { useAppLockStore } from '../src/store/appLockStore';
+import { appLockService } from '../src/services/appLockService';
 import { apiService } from '../src/services/api';
 import { storageService } from '../src/services/storage';
+import { shouldRelockFromBackground } from '../src/features/app-lock/policy';
+import { AppLockGate } from '../src/components/AppLockGate';
 import { colors } from '../src/utils/theme';
 
 const queryClient = new QueryClient();
@@ -57,9 +61,26 @@ function RootLayoutNav() {
   const router = useRouter();
   const segments = useSegments();
   const { isAuthenticated, authToken, isLoading, loadAuth, setupComplete } = useAuthStore();
-  const { settings, loadSettings } = useSettingsStore();
+  const { settings, loadSettings, saveSettings } = useSettingsStore();
+  const {
+    initialized: appLockInitialized,
+    isLocked,
+    hasPin,
+    setInitialized: setAppLockInitialized,
+    setLocked,
+    setHasPin,
+    markBackgrounded,
+    resetSession,
+  } = useAppLockStore();
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const lastRoutedUrlRef = useRef<string | null>(null);
+  const appStateRef = useRef(AppState.currentState);
+  const lastBackgroundAtRef = useRef<number | null>(null);
+
+  const canEnforceAppLock = Boolean(setupComplete && isAuthenticated);
+  const appLockEnabled = Boolean(settings?.app_lock_enabled);
+  const appLockBiometricsEnabled = Boolean(settings?.app_lock_biometrics);
+  const appLockTimeout = settings?.app_lock_timeout || '1m';
 
   // Initialize stores and services
   useEffect(() => {
@@ -88,6 +109,85 @@ function RootLayoutNav() {
       apiService.setAuthToken('');
     }
   }, [settings, authToken]);
+
+  useEffect(() => {
+    if (!canEnforceAppLock) {
+      resetSession();
+      return;
+    }
+    if (!settings) return;
+
+    let cancelled = false;
+    (async () => {
+      const pinExists = await appLockService.hasPin();
+      if (cancelled) return;
+
+      setHasPin(pinExists);
+      if (settings.app_lock_enabled && !pinExists) {
+        // Recoverable fail-safe: prevent lockout if config says enabled but secret is missing.
+        await saveSettings({
+          ...settings,
+          app_lock_enabled: false,
+          app_lock_biometrics: false,
+        });
+        if (!cancelled) {
+          setLocked(false);
+          setAppLockInitialized(true);
+        }
+        return;
+      }
+
+      setLocked(Boolean(settings.app_lock_enabled && pinExists));
+      setAppLockInitialized(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    canEnforceAppLock,
+    resetSession,
+    saveSettings,
+    setAppLockInitialized,
+    setHasPin,
+    setLocked,
+    settings,
+  ]);
+
+  useEffect(() => {
+    if (!canEnforceAppLock || !appLockEnabled || !hasPin) return;
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const now = Date.now();
+
+      if (appStateRef.current === 'active' && nextState !== 'active') {
+        lastBackgroundAtRef.current = now;
+        markBackgrounded(now);
+        if (appLockTimeout === 'immediate') {
+          setLocked(true);
+        }
+      }
+
+      if (appStateRef.current !== 'active' && nextState === 'active') {
+        const lastBackground = lastBackgroundAtRef.current;
+        if (lastBackground && shouldRelockFromBackground(appLockTimeout, lastBackground, now)) {
+          setLocked(true);
+        }
+      }
+
+      appStateRef.current = nextState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [appLockEnabled, appLockTimeout, canEnforceAppLock, hasPin, markBackgrounded, setLocked]);
+
+  useEffect(() => {
+    if (!appLockEnabled) {
+      setLocked(false);
+    }
+  }, [appLockEnabled, setLocked]);
 
   const routeIncomingUrl = useCallback(async (incomingUrl: string) => {
     if (!incomingUrl) return;
@@ -215,9 +315,15 @@ function RootLayoutNav() {
     }
   }, [isAuthenticated, isLoading, router, setupComplete, segments]);
 
-  if (isLoading || setupComplete === null) {
+  if (
+    isLoading ||
+    setupComplete === null ||
+    (canEnforceAppLock && appLockEnabled && !appLockInitialized)
+  ) {
     return null; // Could show a splash screen here
   }
+
+  const shouldShowLockScreen = Boolean(canEnforceAppLock && appLockEnabled && hasPin && isLocked);
 
   return (
     <>
@@ -231,6 +337,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="article" />
+        <Stack.Screen name="live" />
         <Stack.Screen 
           name="player/[id]" 
           options={{ 
@@ -240,6 +347,12 @@ function RootLayoutNav() {
         />
       </Stack>
       <StatusBar style="light" />
+      {shouldShowLockScreen ? (
+        <AppLockGate
+          biometricsEnabled={appLockBiometricsEnabled}
+          onUnlock={() => setLocked(false)}
+        />
+      ) : null}
     </>
   );
 }
