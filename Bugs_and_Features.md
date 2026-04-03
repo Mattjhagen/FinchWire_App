@@ -7,3 +7,7 @@ add a tab at the bottom for live TV and remove the fetch tab from the bottom (it
 treat the AI as a chatbot and make an MD file it can use the learn about the user and update and read regularily when suggesting content
 
 never kick user out of the app (to read an article or to watch a video) in the discover tab, handle all requests in app.
+
+help me set up push notifications, also upon first time app launch ask user about notifications. 
+
+Can we also enable live voice like how you can chat with Grok or ChatGPT?
