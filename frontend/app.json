@@ -60,7 +60,8 @@
         {
           "disableIOS": true,
           "androidIntentFilters": [
-            "text/*",
+            "text/plain",
+            "text/html",
             "video/*"
           ],
           "androidMultiIntentFilters": [
