@@ -43,7 +43,11 @@
           ]
         }
       ],
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -98,7 +102,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "6a981733-6ad4-4906-bb8d-06680457da36"
+        "projectId": "bd5bc628-9fdd-4f3c-96d0-4b08e2daec19"
       }
     },
     "runtimeVersion": {
@@ -107,6 +111,6 @@
     "updates": {
       "url": "https://u.expo.dev/6a981733-6ad4-4906-bb8d-06680457da36"
     },
-    "owner": "pacmac-mobile-llc"
+    "owner": "p3-securities"
   }
 }
