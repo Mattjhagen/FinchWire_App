@@ -21,6 +21,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const { setAuthToken } = useAuthStore();
   const { settings } = useSettingsStore();
+  const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -33,15 +34,10 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       console.log('Attempting login to:', settings?.backend_url);
-      const response = await apiService.login(password);
-      console.log('Login response:', response);
-      
-      if (response.success) {
-        await setAuthToken(password);
-        apiService.setAuthToken(password);
+
         router.replace('/(tabs)');
       } else {
-        Alert.alert('Login Failed', response.error || 'Invalid password');
+        Alert.alert('Login Failed', response.error || 'Invalid username or password');
       }
     } catch (error: any) {
       console.error('Login error:', error);
@@ -73,6 +69,19 @@ export default function LoginScreen() {
 
         {/* Login Form */}
         <View style={styles.form}>
+          <Text style={styles.label}>Username</Text>
+          <TextInput
+            style={styles.input}
+            value={username}
+            onChangeText={setUsername}
+            placeholder="Enter your username"
+            placeholderTextColor={colors.textTertiary}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          <View style={{ height: spacing.md }} />
+
           <Text style={styles.label}>Password</Text>
           <TextInput
             style={styles.input}

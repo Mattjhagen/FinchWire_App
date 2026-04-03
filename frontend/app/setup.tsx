@@ -23,9 +23,8 @@ import { DEFAULT_BACKEND_URL, DEFAULT_RETENTION_DAYS } from '../src/utils/consta
 export default function SetupScreen() {
   const router = useRouter();
   const { saveSettings } = useSettingsStore();
-  const { markSetupComplete, setAuthToken } = useAuthStore();
+  const { markSetupComplete } = useAuthStore();
   const [backendUrl, setBackendUrl] = useState(DEFAULT_BACKEND_URL);
-  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
@@ -35,31 +34,52 @@ export default function SetupScreen() {
       return;
     }
 
-    if (!password.trim()) {
-      Alert.alert('Error', 'Please enter your admin password');
-      return;
-    }
 
-    setIsLoading(true);
-    try {
-      await saveSettings({
-        backend_url: backendUrl.trim(),
-        password: password.trim(),
-        retention_days: DEFAULT_RETENTION_DAYS,
-        wifi_only: false,
-        auto_delete: false,
-      });
-
-      await markSetupComplete();
-      await setAuthToken('bypass');
-      apiService.setBaseUrl(backendUrl.trim());
-      apiService.setAuthToken('bypass');
-      router.replace('/(tabs)');
-    } catch (error) {
       Alert.alert('Error', 'Failed to save settings');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const completeSetup = async (url: string) => {
+    await saveSettings({
+      backend_url: url,
+      password: '',
+      retention_days: DEFAULT_RETENTION_DAYS,
+      wifi_only: false,
+      auto_delete: false,
+      app_lock_enabled: false,
+      app_lock_biometrics: false,
+      app_lock_timeout: '1m',
+      ai_provider: 'none',
+      tts_provider: 'none',
+      has_ai_api_key: false,
+      has_tts_api_key: false,
+      weather_provider: 'open_meteo',
+      market_provider: 'coingecko_yahoo',
+      has_weather_api_key: false,
+      has_market_api_key: false,
+      has_youtube_api_key: false,
+      weather_location: 'Omaha, NE',
+      weather_lat: '41.2565',
+      weather_lon: '-95.9345',
+      home_market_symbol: 'BTC',
+      home_market_asset_type: 'crypto',
+      home_weather_unit: 'f',
+      home_tiles: {
+        weather: true,
+        market: true,
+        verse: true,
+        order: ['weather', 'market', 'verse'],
+      },
+      followed_topics: [],
+      followed_sources: [],
+      followed_creators: [],
+    });
+
+    await markSetupComplete();
+    apiService.setBaseUrl(url);
+    router.replace('/(auth)/login');
   };
 
   return (
@@ -89,7 +109,7 @@ export default function SetupScreen() {
             style={styles.input}
             value={backendUrl}
             onChangeText={setBackendUrl}
-            placeholder="https://yt.finchwire.site"
+            placeholder="https://media.p3lending.space"
             placeholderTextColor={colors.textTertiary}
             autoCapitalize="none"
             autoCorrect={false}
@@ -173,7 +193,7 @@ export default function SetupScreen() {
                 </Text>
 
                 <Text style={styles.stepText}>
-                  Once running, enter your server's IP address (starting with http:// or https://) in the Setup screen.
+
                 </Text>
 
                 <View style={{ height: spacing.xl }} />

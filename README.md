@@ -1,326 +1,273 @@
-# 🎬 FinchWire - Mobile Media Streaming App
+# FinchWire
 
-FinchWire is a cross-platform mobile app (iOS & Android) for streaming, downloading, and managing media from your self-hosted media server. Built with Expo and React Native with a YouTube-inspired dark theme.
+FinchWire is a media-first platform that combines:
 
-## 🌟 Features
+1. A cross-platform Expo mobile app (iOS/Android/web).
+2. A FastAPI backend for auth, downloads, media, personalization, and alerts.
+3. A deterministic signal pipeline for personalized stories and creator notifications.
 
-### MVP (Phase 1) - ✅ Complete
-- **First-Launch Setup**: Easy configuration of backend URL and admin password
-- **Authentication**: Secure login with session management
-- **Media Library**: Browse all your media with YouTube-style cards
-- **Search & Filter**: Quick search across your media library
-- **Video Streaming**: Stream videos directly with native playback controls
-- **Audio Streaming**: Stream audio with background playback support
-- **Media Player**: Full-screen player with playback controls
-- **Downloads**: Download media for offline viewing
-- **Local Storage**: Save downloads with metadata in local database
-- **VLC Integration**: Open media directly in VLC player
-- **Share**: Share media links with others
-- **Settings**: Configure backend URL, retention, and preferences
-- **Auto-Refresh**: Library updates every 5 seconds
+This README is intentionally up to date with the current shipped feature set.
 
-### Phase 2 - Coming Soon
-- Background cleanup worker (auto-delete old downloads)
-- Chromecast support
-- Subtitle support
-- Playback speed control
-- Favorites/watch later
+## Current Feature Set
 
-## 🏗️ Architecture
+| Area | What is implemented now |
+| --- | --- |
+| Setup + Auth | First-launch setup, backend URL test, admin login, session/token compatibility |
+| Media Playback | In-app playback, scrubber, background audio, Picture in Picture, autoplay, shuffle |
+| Downloads | Queue downloads, retry/cancel, keep/unkeep retention flag, local offline downloads |
+| Sharing | Share media URLs, Android share-intent ingestion, deep links for shared media |
+| VLC | "Open in VLC" external launch supported |
+| Home Dashboard | Prompt/action hero, queue cards, smart tiles (weather/market/verse), personalized feed |
+| Discover | Ranked stories, follow controls, interested/not interested/mute actions |
+| Alerts | Notification center, creator watchlist, manual alert-cycle trigger |
+| Push Notifications | Expo token registration, backend subscription + delivery pipeline |
+| Creator Monitoring | YouTube creator polling with live/upload/scheduled event detection |
+| Story Intelligence | RSS ingestion, normalization, dedupe, popularity/velocity/hotness scoring |
+| Settings | Backend URL, password change, AI/TTS provider selection (`Gemini`, `OpenAI`, `Anthropic`, `Grok`, `Groq`), API key management, notification prefs |
+| Security | Optional App Lock with biometrics + 4-6 digit PIN fallback and relock timer |
+| Live TV | `/live` route with YouTube embed channel guide and persisted channel selection |
 
-```
+## Mobile App Navigation
+
+Bottom tabs:
+
+1. `Home`
+2. `Discover`
+3. `Downloads`
+4. `Alerts`
+5. `Fetch`
+6. `Settings`
+
+Additional routes:
+
+1. `/setup` (first-run setup)
+2. `/(auth)/login`
+3. `/player/[id]` (media player modal)
+4. `/article` (article reader + dwell tracking)
+5. `/live` (YouTube live channel guide)
+
+## Architecture
+
+```text
 frontend/
-├── app/                          # Expo Router file-based routing
-│   ├── _layout.tsx              # Root layout with auth protection
-│   ├── setup.tsx                # First-launch configuration
-│   ├── (auth)/
-│   │   ├── _layout.tsx          # Auth group layout
-│   │   └── login.tsx            # Login screen
-│   ├── (tabs)/
-│   │   ├── _layout.tsx          # Bottom tab navigation
-│   │   ├── index.tsx            # Home/Library screen
-│   │   ├── downloads.tsx        # Downloaded media
-│   │   └── settings.tsx         # App settings
-│   └── player/
-│       └── [id].tsx             # Media player (modal)
-├── src/
-│   ├── components/              # Reusable UI components
-│   │   ├── MediaCard.tsx        # YouTube-style media card
-│   │   ├── Loading.tsx          # Loading indicator
-│   │   └── EmptyState.tsx       # Empty state placeholder
-│   ├── services/                # Business logic
-│   │   ├── api.ts               # API client (Fetch-based)
-│   │   ├── download.ts          # Download manager (expo-file-system)
-│   │   └── storage.ts           # Local database (expo-sqlite)
-│   ├── store/                   # State management (Zustand)
-│   │   ├── authStore.ts         # Authentication state
-│   │   └── settingsStore.ts    # App settings state
-│   ├── types/                   # TypeScript types
-│   │   └── index.ts             # Shared types
-│   └── utils/                   # Utilities
-│       ├── theme.ts             # YouTube-inspired theme
-│       └── constants.ts         # App constants
+  app/
+    _layout.tsx                     # Root gate, auth/app-lock/deep-link/share-intent handling
+    setup.tsx                       # First-launch backend + password setup
+    article.tsx                     # Reader with dwell-time tracking
+    live.tsx                        # Live TV page
+    player/[id].tsx                 # Full media player
+    (auth)/login.tsx
+    (tabs)/
+      index.tsx                     # Home dashboard
+      discover.tsx                  # Personalized discover feed
+      downloads.tsx                 # Queue + local downloads
+      alerts.tsx                    # Notification center + creator watches
+      add.tsx                       # Add URL / fetch workflow
+      settings.tsx                  # Preferences, providers, app lock
+  src/
+    services/
+      api.ts                        # Typed API client
+      pushNotifications.ts          # Expo push registration
+      appLockService.ts             # PIN + biometrics secure service
+      download.ts                   # Local media download manager
+    features/
+      app-lock/                     # App lock policy + logic
+      home/                         # Tile registry + providers
+      live/                         # Live TV providers + guide
+    store/
+      authStore.ts
+      settingsStore.ts
+      appLockStore.ts
+
+backend/
+  server.py                         # FastAPI app + orchestration
+  services/
+    news_pipeline.py                # RSS ingest + normalize + dedupe + ranking
+    signal_algorithms.py            # Interest vectors + scoring rules
+    creator_monitor.py              # YouTube event polling
+    notification_engine.py          # Eligibility + notification generation + push delivery
+    home_data_providers.py          # Weather/market/verse providers
+    state_store.py                  # JSON persistence layer
+  tests/
+    test_signal_algorithms.py
+    test_notification_engine.py
 ```
 
-## 🎨 Design System
+## API Surface (Current)
 
-**Theme**: YouTube-inspired dark theme with red accents
+### Auth + account
 
-**Colors**:
-- Primary: `#FF0000` (YouTube Red)
-- Background: `#0F0F0F` (Dark)
-- Surface: `#272727` (Cards)
-- Text: `#FFFFFF` / `#AAAAAA` / `#717171`
+1. `POST /api/login`
+2. `POST /api/logout`
+3. `GET /api/session`
+4. `POST /api/account/password`
+5. `GET /api/settings`
+6. `POST /api/settings`
 
-**Components**:
-- Bottom tab navigation (YouTube-style)
-- Card-based media grid
-- Full-screen modal player
-- Native video controls
+### Downloads + media
 
-## 🔧 Tech Stack
+1. `GET /api/downloads`
+2. `POST /api/downloads`
+3. `DELETE /api/downloads/{job_id}`
+4. `POST /api/downloads/{job_id}/retry`
+5. `PATCH /api/downloads/{job_id}/keep`
+6. `GET /api/downloads/{job_id}/share`
+7. `GET /media/{filename}`
 
-- **Framework**: Expo SDK 54 + React Native
-- **Language**: TypeScript
-- **Navigation**: Expo Router (file-based routing)
-- **State Management**: Zustand + React Query
-- **Media Playback**: expo-av (Video & Audio)
-- **Downloads**: expo-file-system
-- **Local Database**: expo-sqlite
-- **Storage**: @react-native-async-storage/async-storage
-- **Icons**: @expo/vector-icons (Ionicons)
+### Home dashboard providers
 
-## 🚀 Getting Started
+1. `GET /api/home/weather`
+2. `GET /api/home/market`
+3. `GET /api/home/verse`
+4. `POST /api/ai/search`
 
-### Prerequisites
-- Backend server running (from your GitHub repo)
-- Admin password (MEDIA_DROP_ADMIN_PASSWORD)
+### Personalization + stories
 
-### First Launch
-1. Open the app
-2. Enter your backend URL (e.g., `https://yt.finchwire.site`)
-3. Enter your admin password
-4. Tap "Continue"
-5. Login with the same password
+1. `GET /api/live/stories`
+2. `GET /api/live/stories/trending`
+3. `POST /api/live/stories/refresh`
+4. `POST /api/interactions/feed`
+5. `GET /api/interests/me`
+6. `POST /api/interests/feedback`
 
-### Using the App
+### Creators + notifications
 
-**Browse Library**:
-- Tap Library tab to see all media
-- Use search bar to filter
-- Pull down to refresh
-- Tap a completed item to play
+1. `GET /api/creators/watches`
+2. `POST /api/creators/watches`
+3. `DELETE /api/creators/watches/{watch_id}`
+4. `GET /api/creators/events`
+5. `GET /api/notifications`
+6. `GET /api/notifications/preferences`
+7. `POST /api/notifications/preferences`
+8. `POST /api/push/subscribe`
+9. `DELETE /api/push/unsubscribe`
+10. `POST /api/jobs/run-alert-cycle`
 
-**Play Media**:
-- Video: Full-screen player with native controls
-- Audio: Audio player with background support
-- Close button (top-right) to exit player
+## Environment Variables
 
-**Download for Offline**:
-- Open any completed media
-- Tap "Download" button
-- Progress shown during download
-- Downloaded files available in Downloads tab
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `FINCHWIRE_ADMIN_PASSWORD` | Yes | Admin login password bootstrap |
+| `SECRET_KEY` | Yes (prod) | JWT signing secret |
+| `FINCHWIRE_STATE_FILE` | No | Override JSON state path |
+| `FINCHWIRE_PUBLIC_BASE_URL` | No | Canonical URL for generated media links |
+| `FINCHWIRE_NEWS_FEEDS` | No | Comma-separated RSS feed list override |
+| `FINCHWIRE_ALERT_POLL_INTERVAL_SEC` | No | Background alert cycle interval |
+| `YOUTUBE_API_KEY` | Optional/needed for creator alerts | YouTube Data API polling |
+| `EXPO_PUSH_ACCESS_TOKEN` | Optional/recommended | Authenticated Expo push delivery |
+| `FINCHWIRE_WEATHER_LOCATION` | No | Weather tile location label |
+| `FINCHWIRE_WEATHER_LAT` | No | Weather tile latitude |
+| `FINCHWIRE_WEATHER_LON` | No | Weather tile longitude |
+| `FINCHWIRE_PROVIDER_TIMEOUT_SEC` | No | Timeout for home data providers |
+| `GEMINI_API_KEY` | Optional | Fallback key for Gemini AI provider |
+| `OPENAI_API_KEY` | Optional | Fallback key for OpenAI AI provider |
+| `ANTHROPIC_API_KEY` | Optional | Fallback key for Anthropic AI provider |
+| `XAI_API_KEY` / `GROK_API_KEY` | Optional | Fallback key for Grok (xAI) AI provider |
+| `GROQ_API_KEY` | Optional | Fallback key for Groq AI provider |
 
-**Open in VLC**:
-- Tap "Open in VLC" in player
-- App generates `vlc://` URL
-- Falls back to share sheet if VLC not installed
+## Getting Started
 
-**Manage Downloads**:
-- Go to Downloads tab
-- View all downloaded media
-- Tap trash icon to delete
+### 1) Backend
 
-**Settings**:
-- View backend URL
-- Toggle Wi-Fi only downloads
-- Toggle auto-delete old files
-- Logout
-
-## 📡 API Integration
-
-### Backend Endpoints Used
-
-```
-POST   /api/login              # Login with password
-POST   /api/logout             # Logout
-GET    /api/session            # Check session
-GET    /api/downloads          # Get all media jobs
-POST   /api/downloads          # Submit new download
-POST   /api/downloads/:id/retry # Retry failed download
-DELETE /api/downloads/:id      # Delete job
-GET    /media/:filename        # Stream media (with Range support)
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+export FINCHWIRE_ADMIN_PASSWORD='change-me'
+export SECRET_KEY='change-me-too'
+uvicorn server:app --host 0.0.0.0 --port 8080
 ```
 
-### Authentication
-- Auth token stored in AsyncStorage
-- Sent via `x-finchwire-token` header
-- Persists across app restarts
+### 2) Frontend
 
-### Media URLs
-```javascript
-// Streaming
-https://yt.finchwire.site/media/filename.mp4
-
-// Download
-https://yt.finchwire.site/media/filename.mp4?download=true
-
-// VLC
-vlc://https://yt.finchwire.site/media/filename.mp4
+```bash
+cd frontend
+npm install
+npx expo start
 ```
 
-## 💾 Local Storage
+### 3) First launch flow
 
-### AsyncStorage
-- Settings (backend URL, password, preferences)
-- Auth token
-- Setup completion flag
+1. Open app.
+2. Set backend URL (defaults to `https://media.p3lending.space`).
+3. Enter admin password.
+4. Login and start using tabs.
 
-### SQLite Database
-```sql
-CREATE TABLE local_media (
-  id TEXT PRIMARY KEY,
-  media_id TEXT NOT NULL,
-  title TEXT NOT NULL,
-  local_path TEXT NOT NULL,
-  remote_url TEXT NOT NULL,
-  kind TEXT NOT NULL,           -- 'video' or 'audio'
-  mime_type TEXT,
-  file_size INTEGER NOT NULL,
-  downloaded_at TEXT NOT NULL,
-  last_played_at TEXT,
-  play_count INTEGER DEFAULT 0
-);
+### 4) Android production build (EAS)
+
+```bash
+cd frontend
+npx eas-cli@latest whoami
+npx eas-cli@latest build --platform android --profile preview
 ```
 
-### File System
-Downloads stored in: `${FileSystem.documentDirectory}downloads/`
+## App Lock Security (Implemented)
 
-## 🎯 Key Features Explained
+1. App Lock is disabled by default.
+2. Supports PIN (4-6 digits, required for lock).
+3. Optional biometrics can be enabled on top of PIN fallback.
+4. Relock timing options:
+   - Immediate
+   - 1 minute
+   - 5 minutes
+5. Uses secure storage where available (`expo-secure-store`) and never stores plaintext PIN.
 
-### Offline Playback
-- Downloads use expo-file-system
-- Metadata saved in local SQLite database
-- Player checks for local file first
-- Falls back to streaming if not downloaded
+See: `/docs/APP_LOCK_SECURITY.md`
 
-### VLC Integration
-- Uses deep linking: `vlc://https://...`
-- `Linking.canOpenURL()` checks if VLC installed
-- Falls back to share sheet if not available
+## Live TV (YouTube Embed)
 
-### Background Audio
-- Audio session configured for background playback
-- Continues playing when app minimized
-- Proper cleanup on unmount
+1. Route: `/live`
+2. Config file: `frontend/src/features/live/channels.ts`
+3. Supports query selection: `/live?channel=<channelId>`
+4. Persists last selected channel locally.
+5. Uses legal embed-only playback (no stream scraping/rebroadcast).
 
-### Download Progress
-- Real-time progress callbacks
-- Updates UI with percentage
-- Handles failures and cleanup
+See: `/docs/LIVE_TV_YOUTUBE.md`
 
-### Auto-Refresh
-- React Query refetchInterval: 5000ms
-- Updates library status automatically
-- Shows download progress live
+## Personalized Alerts + Story Scoring
 
-## 🔐 Security
+1. Deterministic interest vectors with recency decay.
+2. Story scoring:
+   - popularity
+   - velocity
+   - hotness
+3. Reason-coded notifications.
+4. Creator event monitoring (`live_started`, `video_published`, `livestream_scheduled`).
+5. Push delivery via Expo notifications.
 
-- No credentials hardcoded
-- Auth token stored securely in AsyncStorage
-- HTTPS communication with backend
-- Session management with backend
-- Proper cleanup on logout
+See: `/docs/AI_PERSONALIZED_ALERTING.md`
 
-## 📱 Platform Support
+## Home Dashboard Smart Tiles
 
-- ✅ iOS (tested on simulator & device)
-- ✅ Android (tested on emulator & device)
-- ✅ Web (basic support via Expo web)
+1. Weather tile
+2. Market watch tile (stock/crypto symbol selector)
+3. Verse of the day tile
+4. Follow-aware feed actions and interaction tracking
 
-## 🎬 User Flows
+See: `/docs/HOME_DASHBOARD_ARCHITECTURE.md`
 
-### First Time User
-1. App opens → Setup screen
-2. Enter backend URL + password → Save
-3. Redirected to Login screen
-4. Login → Home screen with media library
+## Testing
 
-### Returning User
-1. App opens → Auto-login check
-2. If authenticated → Home screen
-3. If not → Login screen
+```bash
+cd frontend
+npm run lint
+npm run test
 
-### Playing Media
-1. Browse Library → Tap media card
-2. Player opens (full-screen modal)
-3. Video/audio plays automatically
-4. Controls: play/pause, seek, volume
-5. Actions: Download, VLC, Share
-6. Close button returns to library
+cd ../backend
+pytest
+```
 
-## 🛠️ Configuration
+## Known Constraints
 
-### Change Backend URL
-1. Go to Settings tab
-2. View current backend URL
-3. To change: requires app reinstall or code modification
+1. Some YouTube embeds can be blocked by regional/rights restrictions.
+2. Creator monitoring quality depends on YouTube API quota/availability.
+3. JSON state store is great for current iteration, but DB migration is recommended for scale.
+4. Push notifications require device permissions and valid Expo push token registration.
 
-### Settings Options
-- **Wi-Fi Only**: Enable to restrict downloads to Wi-Fi
-- **Auto-Delete**: Enable to auto-delete old downloads
-- **Retention Days**: 30 days (default, configurable in code)
+## Documentation Index
 
-## 🐛 Troubleshooting
-
-**Login fails**:
-- Check backend URL is correct
-- Verify admin password matches backend
-- Check network connection
-- Ensure backend server is running
-
-**Media won't play**:
-- Check media status is "completed"
-- Verify file exists on server
-- Check network connection for streaming
-- For downloads, verify local file exists
-
-**VLC won't open**:
-- Install VLC app from App Store / Play Store
-- Grant permissions if prompted
-- Use Share option as fallback
-
-**Downloads fail**:
-- Check available storage space
-- Verify network connection
-- Check Wi-Fi only setting
-- Retry from player screen
-
-## 📝 Future Enhancements
-
-- [ ] Push notifications for download completion
-- [ ] Offline mode indicator
-- [ ] Video quality selection
-- [ ] Picture-in-picture mode
-- [ ] Chromecast support
-- [ ] Playlist creation
-- [ ] Watch history
-- [ ] Recently played section
-- [ ] Sort and filter options
-- [ ] Batch download
-- [ ] Background refresh
-
-## 🙏 Credits
-
-Built with:
-- [Expo](https://expo.dev/)
-- [React Native](https://reactnative.dev/)
-- [Zustand](https://github.com/pmndrs/zustand)
-- [TanStack Query](https://tanstack.com/query)
-
-Backend from: [YT-Download](https://github.com/Mattjhagen/YT-Download)
-
----
-
-**FinchWire** - Your personal media streaming companion 🎬
+1. `/docs/AI_PERSONALIZED_ALERTING.md`
+2. `/docs/HOME_DASHBOARD_ARCHITECTURE.md`
+3. `/docs/LIVE_TV_YOUTUBE.md`
+4. `/docs/APP_LOCK_SECURITY.md`

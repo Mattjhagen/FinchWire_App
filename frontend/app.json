@@ -9,15 +9,46 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Use Face ID to unlock FinchWire."
+      }
     },
     "android": {
       "package": "com.finchwire.app",
+      "versionCode": 3,
+      "googleServicesFile": "./firebase/google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000"
+        "backgroundColor": "#000000"
       },
-      "edgeToEdgeEnabled": true
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "media.p3lending.space",
+              "pathPrefix": "/media/"
+            },
+            {
+              "scheme": "https",
+              "host": "yt.finchwire.site",
+              "pathPrefix": "/media/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -25,6 +56,22 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "expo-share-intent",
+        {
+          "disableIOS": true,
+          "androidIntentFilters": [
+            "text/plain",
+
+            "video/*"
+          ],
+          "androidMultiIntentFilters": [
+            "video/*"
+          ]
+        }
+      ],
+      "expo-notifications",
+      "expo-local-authentication",
       "expo-router",
       [
         "expo-splash-screen",
@@ -32,7 +79,22 @@
           "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000"
+          "backgroundColor": "#000000"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
+        "expo-video",
+        {
+          "supportsPictureInPicture": true,
+          "supportsBackgroundPlayback": true
         }
       ]
     ],
@@ -42,8 +104,15 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "b493007f-b040-40a1-88e7-fb5cdba80233"
+        "projectId": "bd5bc628-9fdd-4f3c-96d0-4b08e2daec19"
       }
-    }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6a981733-6ad4-4906-bb8d-06680457da36"
+    },
+    "owner": "p3-securities"
   }
 }

@@ -1,6 +1,6 @@
 // FinchWire Constants
 
-export const DEFAULT_BACKEND_URL = 'https://yt.finchwire.site';
+export const DEFAULT_BACKEND_URL = 'https://media.p3lending.space';
 export const DEFAULT_RETENTION_DAYS = 30;
 
 export const STORAGE_KEYS = {
@@ -13,9 +13,29 @@ export const API_ENDPOINTS = {
   LOGIN: '/api/login',
   LOGOUT: '/api/logout',
   SESSION: '/api/session',
+  CHANGE_PASSWORD: '/api/account/password',
+  SETTINGS: '/api/settings',
   DOWNLOADS: '/api/downloads',
+  DOWNLOAD_KEEP: '/api/downloads',
   FILES: '/api/files',
   EVENTS: '/api/events',
+  LIVE_STORIES: '/api/live/stories',
+  LIVE_STORIES_TRENDING: '/api/live/stories/trending',
+  LIVE_STORIES_REFRESH: '/api/live/stories/refresh',
+  HOME_WEATHER: '/api/home/weather',
+  HOME_MARKET: '/api/home/market',
+  HOME_VERSE: '/api/home/verse',
+  AI_SEARCH: '/api/ai/search',
+  FEED_INTERACTIONS: '/api/interactions/feed',
+  INTERESTS_ME: '/api/interests/me',
+  INTERESTS_FEEDBACK: '/api/interests/feedback',
+  CREATOR_WATCHES: '/api/creators/watches',
+  CREATOR_EVENTS: '/api/creators/events',
+  PUSH_SUBSCRIBE: '/api/push/subscribe',
+  PUSH_UNSUBSCRIBE: '/api/push/unsubscribe',
+  NOTIFICATIONS: '/api/notifications',
+  NOTIFICATION_PREFERENCES: '/api/notifications/preferences',
+  ALERT_CYCLE: '/api/jobs/run-alert-cycle',
 };
 
 export const MEDIA_TYPES = {

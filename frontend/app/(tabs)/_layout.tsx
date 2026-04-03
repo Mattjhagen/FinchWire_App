@@ -36,9 +36,18 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Library',
+          title: 'Home',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="play-circle" size={size} color={color} />
+            <Ionicons name="home" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="discover"
+        options={{
+          title: 'Discover',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="sparkles" size={size} color={color} />
           ),
         }}
       />
@@ -52,12 +61,27 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="alerts"
+        options={{
+          title: 'Alerts',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="notifications" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="live"
+        options={{
+          title: 'Live TV',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="tv" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="add"
         options={{
-          title: 'Add',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="add-circle" size={size} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen
