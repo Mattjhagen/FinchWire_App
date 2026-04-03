@@ -15,6 +15,9 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, borderRadius } from '../../src/utils/theme';
 import { apiService } from '../../src/services/api';
+import { personalizationService } from '../../src/services/personalization';
+
+const looksLikeUrl = (value: string): boolean => /^https?:\/\/\S+/i.test(value.trim());
 
 export default function AddScreen() {
   const router = useRouter();
@@ -30,8 +33,15 @@ export default function AddScreen() {
 
     setIsLoading(true);
     try {
+      const trimmedValue = url.trim();
+      if (!looksLikeUrl(trimmedValue)) {
+        personalizationService.recordAiPrompt(trimmedValue).catch(() => {
+          // Non-blocking signal for Discover personalization.
+        });
+      }
+
       const response = await apiService.submitDownload({
-        url: url.trim(),
+        url: trimmedValue,
         is_audio: isAudioOnly,
       });
 

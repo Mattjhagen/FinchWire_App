@@ -57,6 +57,20 @@ export interface AppSettings {
   retention_days: number;
   wifi_only: boolean;
   auto_delete: boolean;
+  ai_provider: AiProvider;
+  tts_provider: TtsProvider;
+  has_ai_api_key: boolean;
+  has_tts_api_key: boolean;
+}
+
+export type AiProvider = 'none' | 'gemini' | 'openai' | 'anthropic' | 'groq';
+export type TtsProvider = 'none' | 'gemini' | 'openai' | 'elevenlabs';
+
+export interface ServerRuntimeSettings {
+  ai_provider: AiProvider;
+  tts_provider: TtsProvider;
+  has_ai_api_key: boolean;
+  has_tts_api_key: boolean;
 }
 
 export interface AuthResponse {

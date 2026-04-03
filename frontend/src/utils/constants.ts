@@ -13,6 +13,8 @@ export const API_ENDPOINTS = {
   LOGIN: '/api/login',
   LOGOUT: '/api/logout',
   SESSION: '/api/session',
+  CHANGE_PASSWORD: '/api/account/password',
+  SETTINGS: '/api/settings',
   DOWNLOADS: '/api/downloads',
   DOWNLOAD_KEEP: '/api/downloads',
   FILES: '/api/files',

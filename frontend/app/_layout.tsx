@@ -81,6 +81,7 @@ function RootLayoutNav() {
         <Stack.Screen name="setup" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="article" />
         <Stack.Screen 
           name="player/[id]" 
           options={{ 

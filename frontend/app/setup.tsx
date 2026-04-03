@@ -68,6 +68,10 @@ export default function SetupScreen() {
       retention_days: DEFAULT_RETENTION_DAYS,
       wifi_only: false,
       auto_delete: false,
+      ai_provider: 'none',
+      tts_provider: 'none',
+      has_ai_api_key: false,
+      has_tts_api_key: false,
     });
 
     await markSetupComplete();

@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { borderRadius, colors, spacing, typography } from '../../src/utils/theme';
 import { apiService } from '../../src/services/api';
+import { personalizationService } from '../../src/services/personalization';
 import { MediaJob } from '../../src/types';
 
 type AssistantMode = 'ai' | 'video' | 'news' | 'fetch';
@@ -205,6 +206,10 @@ export default function HomeScreen() {
       return;
     }
 
+    personalizationService.recordAiPrompt(value).catch(() => {
+      // Non-blocking signal for Discover personalization.
+    });
+
     if (mode === 'fetch') {
       await handleQueueUrl(value, false);
       return;
@@ -324,6 +329,9 @@ export default function HomeScreen() {
                 setPrompt(topic);
                 setActiveTopic(topic);
                 setMode('ai');
+                personalizationService.recordAiPrompt(topic).catch(() => {
+                  // Non-blocking signal for Discover personalization.
+                });
                 refetchNews();
               }}
             >
@@ -352,7 +360,16 @@ export default function HomeScreen() {
         ) : null}
         <View style={styles.cardList}>
           {(newsItems ?? []).slice(0, 6).map((item) => (
-            <TouchableOpacity key={item.id} style={styles.newsCard} onPress={() => openExternal(item.link)}>
+            <TouchableOpacity
+              key={item.id}
+              style={styles.newsCard}
+              onPress={() => {
+                personalizationService.recordAiPrompt(`${item.title} ${item.source}`).catch(() => {
+                  // Non-blocking signal for Discover personalization.
+                });
+                openExternal(item.link);
+              }}
+            >
               <Text style={styles.newsSource}>{item.source}</Text>
               <Text style={styles.newsTitle} numberOfLines={3}>{item.title}</Text>
               <Text style={styles.newsMeta} numberOfLines={1}>{item.publishedAt}</Text>
@@ -375,7 +392,17 @@ export default function HomeScreen() {
               </View>
               <Text style={styles.mediaMeta} numberOfLines={1}>{job.source_domain || 'Unknown source'}</Text>
               <View style={styles.mediaActions}>
-                <TouchableOpacity style={[styles.actionBtn, styles.primaryBtn]} onPress={() => router.push(`/player/${job.id}`)}>
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.primaryBtn]}
+                  onPress={() => {
+                    personalizationService
+                      .recordMediaInteraction(job.filename || 'Untitled', job.source_domain)
+                      .catch(() => {
+                        // Non-blocking signal for Discover personalization.
+                      });
+                    router.push(`/player/${job.id}`);
+                  }}
+                >
                   <Ionicons name="play" size={16} color={colors.buttonText} />
                   <Text style={styles.actionBtnText}>Play</Text>
                 </TouchableOpacity>

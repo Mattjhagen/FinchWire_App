@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, borderRadius } from '../../src/utils/theme';
 import { apiService } from '../../src/services/api';
 import { downloadService } from '../../src/services/download';
+import { personalizationService } from '../../src/services/personalization';
 import { storageService } from '../../src/services/storage';
 import { useAuthStore } from '../../src/store/authStore';
 import { Loading } from '../../src/components/Loading';
@@ -195,6 +196,13 @@ export default function PlayerScreen() {
       }
     };
   }, [id, loadMedia, loadPlayerPrefs, media?.id, position, savePosition]);
+
+  useEffect(() => {
+    if (!media) return;
+    personalizationService.recordMediaInteraction(media.filename || 'Untitled', media.source_domain).catch(() => {
+      // Non-blocking signal for Discover personalization.
+    });
+  }, [media]);
 
   useEffect(() => {
     setIsPlaying(player.playing);

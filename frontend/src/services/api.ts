@@ -1,7 +1,27 @@
 // API Service for FinchWire
 import { API_ENDPOINTS } from '../utils/constants';
-import { MediaJob, DownloadJobRequest, AuthResponse, SessionResponse } from '../types';
+import {
+  AiProvider,
+  MediaJob,
+  DownloadJobRequest,
+  AuthResponse,
+  SessionResponse,
+  ServerRuntimeSettings,
+  TtsProvider,
+} from '../types';
 import { Platform } from 'react-native';
+
+interface UpdateServerSettingsPayload {
+  ai_provider?: AiProvider;
+  tts_provider?: TtsProvider;
+  ai_api_key?: string;
+  tts_api_key?: string;
+}
+
+interface ServerSettingsResponse {
+  success: boolean;
+  settings: ServerRuntimeSettings;
+}
 
 class ApiService {
   private baseUrl: string = '';
@@ -210,6 +230,29 @@ class ApiService {
 
   async checkSession(): Promise<SessionResponse> {
     return this.request<SessionResponse>(API_ENDPOINTS.SESSION);
+  }
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(API_ENDPOINTS.CHANGE_PASSWORD, {
+      method: 'POST',
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    });
+  }
+
+  async getServerSettings(): Promise<ServerRuntimeSettings> {
+    const response = await this.request<ServerSettingsResponse>(API_ENDPOINTS.SETTINGS);
+    return response.settings;
+  }
+
+  async updateServerSettings(payload: UpdateServerSettingsPayload): Promise<ServerRuntimeSettings> {
+    const response = await this.request<ServerSettingsResponse>(API_ENDPOINTS.SETTINGS, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+    return response.settings;
   }
 
   // Media endpoints

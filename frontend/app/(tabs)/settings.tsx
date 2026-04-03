@@ -16,43 +16,203 @@ import { colors, spacing, typography, borderRadius } from '../../src/utils/theme
 import { useAuthStore } from '../../src/store/authStore';
 import { useSettingsStore } from '../../src/store/settingsStore';
 import { apiService } from '../../src/services/api';
+import { AiProvider, TtsProvider } from '../../src/types';
+
+const AI_PROVIDER_OPTIONS: { label: string; value: AiProvider }[] = [
+  { label: 'None', value: 'none' },
+  { label: 'Gemini', value: 'gemini' },
+  { label: 'OpenAI', value: 'openai' },
+  { label: 'Anthropic', value: 'anthropic' },
+  { label: 'Groq', value: 'groq' },
+];
+
+const TTS_PROVIDER_OPTIONS: { label: string; value: TtsProvider }[] = [
+  { label: 'None', value: 'none' },
+  { label: 'Gemini', value: 'gemini' },
+  { label: 'OpenAI', value: 'openai' },
+  { label: 'ElevenLabs', value: 'elevenlabs' },
+];
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { clearAuth } = useAuthStore();
+  const { clearAuth, setAuthToken } = useAuthStore();
   const { settings, saveSettings } = useSettingsStore();
+
   const [isEditingUrl, setIsEditingUrl] = React.useState(false);
   const [tempUrl, setTempUrl] = React.useState(settings?.backend_url || '');
+
+  const [currentPassword, setCurrentPassword] = React.useState('');
+  const [newPassword, setNewPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [isChangingPassword, setIsChangingPassword] = React.useState(false);
+
+  const [aiProvider, setAiProvider] = React.useState<AiProvider>(settings?.ai_provider || 'none');
+  const [ttsProvider, setTtsProvider] = React.useState<TtsProvider>(settings?.tts_provider || 'none');
+  const [aiApiKey, setAiApiKey] = React.useState('');
+  const [ttsApiKey, setTtsApiKey] = React.useState('');
+  const [hasAiApiKey, setHasAiApiKey] = React.useState(Boolean(settings?.has_ai_api_key));
+  const [hasTtsApiKey, setHasTtsApiKey] = React.useState(Boolean(settings?.has_tts_api_key));
+  const [isSavingProviders, setIsSavingProviders] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!settings) return;
+    setTempUrl(settings.backend_url);
+    setAiProvider(settings.ai_provider || 'none');
+    setTtsProvider(settings.tts_provider || 'none');
+    setHasAiApiKey(Boolean(settings.has_ai_api_key));
+    setHasTtsApiKey(Boolean(settings.has_tts_api_key));
+  }, [settings]);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const loadServerSettings = async () => {
+      try {
+        const serverSettings = await apiService.getServerSettings();
+        if (!isMounted) return;
+        setAiProvider(serverSettings.ai_provider);
+        setTtsProvider(serverSettings.tts_provider);
+        setHasAiApiKey(serverSettings.has_ai_api_key);
+        setHasTtsApiKey(serverSettings.has_tts_api_key);
+      } catch {
+        // Non-blocking: keep local settings fallback.
+      }
+    };
+
+    loadServerSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, [settings?.backend_url]);
+
+  const persistProviderState = async (next: {
+    ai_provider: AiProvider;
+    tts_provider: TtsProvider;
+    has_ai_api_key: boolean;
+    has_tts_api_key: boolean;
+  }) => {
+    if (!settings) return;
+    await saveSettings({
+      ...settings,
+      ai_provider: next.ai_provider,
+      tts_provider: next.tts_provider,
+      has_ai_api_key: next.has_ai_api_key,
+      has_tts_api_key: next.has_tts_api_key,
+    });
+  };
 
   const handleSaveUrl = async () => {
     if (settings && tempUrl.trim()) {
       await saveSettings({ ...settings, backend_url: tempUrl.trim() });
       setIsEditingUrl(false);
-      Alert.alert('Success', 'Backend URL updated! Please restart the app if it doesn\'t refresh.');
+      Alert.alert('Success', 'Backend URL updated. Restart the app if needed.');
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!settings) return;
+
+    if (!currentPassword.trim() || !newPassword.trim() || !confirmPassword.trim()) {
+      Alert.alert('Missing fields', 'Enter current password, new password, and confirmation.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      Alert.alert('Mismatch', 'New password and confirmation do not match.');
+      return;
+    }
+
+    if (newPassword.trim().length < 8) {
+      Alert.alert('Password too short', 'Use at least 8 characters.');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      await apiService.changePassword(currentPassword, newPassword.trim());
+
+      const sessionToken = `session:${newPassword.trim()}`;
+      apiService.setAuthToken(sessionToken);
+      await setAuthToken(sessionToken);
+
+      await saveSettings({ ...settings, password: newPassword.trim() });
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      Alert.alert('Password updated', 'Your admin password was updated on the server.');
+    } catch (error: any) {
+      Alert.alert('Password update failed', error?.message || 'Could not change password.');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const handleSaveProviders = async () => {
+    if (!settings) return;
+    setIsSavingProviders(true);
+
+    try {
+      const payload: {
+        ai_provider: AiProvider;
+        tts_provider: TtsProvider;
+        ai_api_key?: string;
+        tts_api_key?: string;
+      } = {
+        ai_provider: aiProvider,
+        tts_provider: ttsProvider,
+      };
+
+      if (aiApiKey.trim()) payload.ai_api_key = aiApiKey.trim();
+      if (ttsApiKey.trim()) payload.tts_api_key = ttsApiKey.trim();
+
+      const updated = await apiService.updateServerSettings(payload);
+      setAiProvider(updated.ai_provider);
+      setTtsProvider(updated.tts_provider);
+      setHasAiApiKey(updated.has_ai_api_key);
+      setHasTtsApiKey(updated.has_tts_api_key);
+      setAiApiKey('');
+      setTtsApiKey('');
+
+      await persistProviderState(updated);
+      Alert.alert('Saved', 'AI/TTS provider settings have been saved to your server.');
+    } catch (error: any) {
+      Alert.alert('Save failed', error?.message || 'Could not save AI/TTS settings.');
+    } finally {
+      setIsSavingProviders(false);
+    }
+  };
+
+  const clearServerKey = async (kind: 'ai' | 'tts') => {
+    if (!settings) return;
+    try {
+      const payload = kind === 'ai' ? { ai_api_key: '' } : { tts_api_key: '' };
+      const updated = await apiService.updateServerSettings(payload);
+      setHasAiApiKey(updated.has_ai_api_key);
+      setHasTtsApiKey(updated.has_tts_api_key);
+      await persistProviderState(updated);
+      Alert.alert('Cleared', `${kind.toUpperCase()} key removed from server.`);
+    } catch (error: any) {
+      Alert.alert('Clear failed', error?.message || 'Could not clear key.');
     }
   };
 
   const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await apiService.logout();
-            } catch (error) {
-              // Ignore logout errors
-            }
-            await clearAuth();
-            router.replace('/(auth)/login');
-          },
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await apiService.logout();
+          } catch {
+            // Ignore logout errors
+          }
+          await clearAuth();
+          router.replace('/(auth)/login');
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const toggleWifiOnly = async (value: boolean) => {
@@ -69,7 +229,6 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      {/* Server Info */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Server</Text>
         <View style={styles.card}>
@@ -86,6 +245,7 @@ export default function SettingsScreen() {
                     autoCapitalize="none"
                     autoCorrect={false}
                     placeholder="https://..."
+                    placeholderTextColor={colors.textTertiary}
                   />
                   <TouchableOpacity onPress={handleSaveUrl} style={styles.saveIconButton}>
                     <Ionicons name="checkmark-circle" size={32} color={colors.success} />
@@ -104,7 +264,167 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      {/* Download Settings */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Security</Text>
+        <View style={styles.card}>
+          <Text style={styles.inlineLabel}>Current Password</Text>
+          <TextInput
+            style={styles.textInput}
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            placeholder="Enter current password"
+            placeholderTextColor={colors.textTertiary}
+          />
+
+          <Text style={styles.inlineLabel}>New Password</Text>
+          <TextInput
+            style={styles.textInput}
+            value={newPassword}
+            onChangeText={setNewPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            placeholder="At least 8 characters"
+            placeholderTextColor={colors.textTertiary}
+          />
+
+          <Text style={styles.inlineLabel}>Confirm New Password</Text>
+          <TextInput
+            style={styles.textInput}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            placeholder="Re-enter new password"
+            placeholderTextColor={colors.textTertiary}
+          />
+
+          <TouchableOpacity
+            style={[styles.primaryActionButton, isChangingPassword && styles.buttonDisabled]}
+            onPress={handleChangePassword}
+            disabled={isChangingPassword}
+          >
+            <Text style={styles.primaryActionText}>
+              {isChangingPassword ? 'Updating...' : 'Change Password'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>AI + Voice</Text>
+        <View style={styles.card}>
+          <Text style={styles.inlineLabel}>AI Provider</Text>
+          <View style={styles.chipWrap}>
+            {AI_PROVIDER_OPTIONS.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.providerChip,
+                  aiProvider === option.value && styles.providerChipActive,
+                ]}
+                onPress={() => setAiProvider(option.value)}
+              >
+                <Text
+                  style={[
+                    styles.providerChipText,
+                    aiProvider === option.value && styles.providerChipTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.inlineLabel}>TTS Provider</Text>
+          <View style={styles.chipWrap}>
+            {TTS_PROVIDER_OPTIONS.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.providerChip,
+                  ttsProvider === option.value && styles.providerChipActive,
+                ]}
+                onPress={() => setTtsProvider(option.value)}
+              >
+                <Text
+                  style={[
+                    styles.providerChipText,
+                    ttsProvider === option.value && styles.providerChipTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.inlineLabel}>AI API Key</Text>
+          <TextInput
+            style={styles.textInput}
+            value={aiApiKey}
+            onChangeText={setAiApiKey}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+            placeholder={
+              hasAiApiKey
+                ? 'Key saved on server (enter new key to replace)'
+                : 'Enter AI provider API key'
+            }
+            placeholderTextColor={colors.textTertiary}
+          />
+          <View style={styles.statusRow}>
+            <Text style={styles.keyStatusText}>
+              AI key status: {hasAiApiKey ? 'Saved on server' : 'Not set'}
+            </Text>
+            {hasAiApiKey ? (
+              <TouchableOpacity onPress={() => clearServerKey('ai')}>
+                <Text style={styles.linkDanger}>Clear</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <Text style={styles.inlineLabel}>TTS API Key</Text>
+          <TextInput
+            style={styles.textInput}
+            value={ttsApiKey}
+            onChangeText={setTtsApiKey}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+            placeholder={
+              hasTtsApiKey
+                ? 'Key saved on server (enter new key to replace)'
+                : 'Enter TTS provider API key'
+            }
+            placeholderTextColor={colors.textTertiary}
+          />
+          <View style={styles.statusRow}>
+            <Text style={styles.keyStatusText}>
+              TTS key status: {hasTtsApiKey ? 'Saved on server' : 'Not set'}
+            </Text>
+            {hasTtsApiKey ? (
+              <TouchableOpacity onPress={() => clearServerKey('tts')}>
+                <Text style={styles.linkDanger}>Clear</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.primaryActionButton, isSavingProviders && styles.buttonDisabled]}
+            onPress={handleSaveProviders}
+            disabled={isSavingProviders}
+          >
+            <Text style={styles.primaryActionText}>
+              {isSavingProviders ? 'Saving...' : 'Save AI/TTS Settings'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Downloads</Text>
         <View style={styles.card}>
@@ -112,9 +432,7 @@ export default function SettingsScreen() {
             <Ionicons name="wifi-outline" size={24} color={colors.primary} />
             <View style={styles.rowContent}>
               <Text style={styles.rowLabel}>Wi-Fi Only</Text>
-              <Text style={styles.rowDescription}>
-                Only download over Wi-Fi connection
-              </Text>
+              <Text style={styles.rowDescription}>Only download over Wi-Fi connection</Text>
             </View>
             <Switch
               value={settings?.wifi_only || false}
@@ -144,7 +462,6 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      {/* About */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>About</Text>
         <View style={styles.card}>
@@ -158,7 +475,6 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      {/* Logout */}
       <View style={styles.section}>
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={24} color={colors.error} />
@@ -214,6 +530,37 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     marginTop: 2,
   },
+  inlineLabel: {
+    ...typography.bodySmall,
+    fontWeight: '600',
+    marginBottom: spacing.xs,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  textInput: {
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.md,
+    padding: spacing.sm,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.xs,
+  },
+  primaryActionButton: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  primaryActionText: {
+    ...typography.bodySmall,
+    fontWeight: '700',
+    color: colors.buttonText,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   divider: {
     height: 1,
     backgroundColor: colors.border,
@@ -241,6 +588,47 @@ const styles = StyleSheet.create({
   },
   saveIconButton: {
     padding: 2,
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  providerChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  providerChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryDark,
+  },
+  providerChipText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  providerChipTextActive: {
+    color: colors.buttonText,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  keyStatusText: {
+    ...typography.caption,
+    color: colors.textTertiary,
+  },
+  linkDanger: {
+    ...typography.caption,
+    color: colors.error,
+    fontWeight: '700',
   },
   logoutButton: {
     flexDirection: 'row',
