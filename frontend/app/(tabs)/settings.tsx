@@ -623,6 +623,23 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>RSS Feeds</Text>
+        <View style={styles.card}>
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => router.push('/rss-feeds')}
+          >
+            <Ionicons name="radio-outline" size={22} color={colors.primary} style={styles.rowIcon} />
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Manage RSS Feeds</Text>
+              <Text style={styles.rowDescription}>Add or remove feeds shown on the home screen.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Home Dashboard</Text>
         <View style={styles.card}>
           <Text style={styles.inlineLabel}>Smart Tiles</Text>

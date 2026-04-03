@@ -18,6 +18,7 @@ import { borderRadius, colors, spacing, typography } from '../../src/utils/theme
 import { apiService } from '../../src/services/api';
 import { personalizationService } from '../../src/services/personalization';
 import { MediaJob } from '../../src/types';
+import { useSettingsStore } from '../../src/store/settingsStore';
 import {
   fetchWeather,
   fetchMarketPrices,
@@ -119,6 +120,7 @@ const getPlaybackPath = (job: MediaJob): string => {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { settings } = useSettingsStore();
   const [mode, setMode] = useState<AssistantMode>('ai');
   const [prompt, setPrompt] = useState('');
   const [activeTopic, setActiveTopic] = useState(DEFAULT_NEWS_TOPIC);
@@ -186,16 +188,21 @@ export default function HomeScreen() {
     retry: 1,
   });
 
+  const allRssFeeds = useMemo(() => {
+    const custom = settings?.custom_rss_feeds ?? [];
+    return [...PRESET_RSS_FEEDS, ...custom];
+  }, [settings?.custom_rss_feeds]);
+
   const { data: rssFeedItems, refetch: refetchRss } = useQuery({
-    queryKey: ['widget-rss-feeds'],
+    queryKey: ['widget-rss-feeds', allRssFeeds.map((f) => f.url).join(',')],
     queryFn: async (): Promise<RssItem[]> => {
       const results = await Promise.allSettled(
-        PRESET_RSS_FEEDS.map((f) => fetchRssFeed(f.url, f.label, 4))
+        allRssFeeds.map((f) => fetchRssFeed(f.url, f.label, 4))
       );
       return results
         .filter((r): r is PromiseFulfilledResult<RssItem[]> => r.status === 'fulfilled')
         .flatMap((r) => r.value)
-        .slice(0, 12);
+        .slice(0, 16);
     },
     staleTime: 10 * 60 * 1000,
     refetchInterval: 15 * 60 * 1000,
@@ -450,7 +457,13 @@ export default function HomeScreen() {
         {/* ── RSS Feed Headlines ── */}
         {(rssFeedItems ?? []).length > 0 ? (
           <>
-            <SectionTitle title="RSS Headlines" />
+            <View style={styles.sectionHeaderRow}>
+              <SectionTitle title="RSS Headlines" />
+              <TouchableOpacity onPress={() => router.push('/rss-feeds')} style={styles.manageFeedsBtn}>
+                <Ionicons name="settings-outline" size={14} color={colors.primary} />
+                <Text style={styles.manageFeedsText}>Manage</Text>
+              </TouchableOpacity>
+            </View>
             <View style={styles.cardList}>
               {(rssFeedItems ?? []).slice(0, 6).map((item) => (
                 <TouchableOpacity
@@ -773,6 +786,23 @@ const styles = StyleSheet.create({
     ...typography.h3,
     marginTop: spacing.md,
     marginBottom: spacing.sm,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  manageFeedsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  manageFeedsText: {
+    ...typography.caption,
+    color: colors.primary,
+    fontWeight: '700',
   },
   horizontalRow: {
     gap: spacing.sm,

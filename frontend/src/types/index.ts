@@ -71,6 +71,12 @@ export interface AppSettings {
   followed_topics: string[];
   followed_sources: string[];
   followed_creators: string[];
+  custom_rss_feeds: RssFeedEntry[];
+}
+
+export interface RssFeedEntry {
+  url: string;
+  label: string;
 }
 
 export type AssetType = 'stock' | 'crypto';

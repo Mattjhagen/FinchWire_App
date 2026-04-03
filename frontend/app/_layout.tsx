@@ -338,6 +338,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="article" />
         <Stack.Screen name="live" />
+        <Stack.Screen name="rss-feeds" />
         <Stack.Screen 
           name="player/[id]" 
           options={{ 

@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS, DEFAULT_BACKEND_URL, DEFAULT_RETENTION_DAYS } from '../utils/constants';
-import { AiProvider, AppLockTimeout, AppSettings, AssetType, HomeTileType, TemperatureUnit, TtsProvider } from '../types';
+import { AiProvider, AppLockTimeout, AppSettings, AssetType, HomeTileType, RssFeedEntry, TemperatureUnit, TtsProvider } from '../types';
 
 interface SettingsState {
   settings: AppSettings | null;
@@ -45,6 +45,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   followed_topics: [],
   followed_sources: [],
   followed_creators: [],
+  custom_rss_feeds: [],
 };
 
 const normalizeSettings = (input: Partial<AppSettings> | null | undefined): AppSettings => {
@@ -93,6 +94,23 @@ const normalizeSettings = (input: Partial<AppSettings> | null | undefined): AppS
     );
   };
 
+  const normalizeRssFeeds = (value: unknown): RssFeedEntry[] => {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter(
+        (entry) =>
+          entry &&
+          typeof entry === 'object' &&
+          typeof entry.url === 'string' &&
+          entry.url.startsWith('http')
+      )
+      .map((entry) => ({
+        url: String(entry.url).trim(),
+        label: String(entry.label || '').trim() || 'Feed',
+      }))
+      .slice(0, 50);
+  };
+
   return {
     ...DEFAULT_SETTINGS,
     ...candidate,
@@ -120,6 +138,7 @@ const normalizeSettings = (input: Partial<AppSettings> | null | undefined): AppS
     followed_topics: normalizeFollowList(candidate.followed_topics),
     followed_sources: normalizeFollowList(candidate.followed_sources),
     followed_creators: normalizeFollowList(candidate.followed_creators),
+    custom_rss_feeds: normalizeRssFeeds(candidate.custom_rss_feeds),
   };
 };
 

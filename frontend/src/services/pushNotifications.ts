@@ -2,6 +2,11 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+
+// Project ID from app.json extra.eas.projectId — required by Expo SDK 50+
+const EXPO_PROJECT_ID: string =
+  Constants.expoConfig?.extra?.eas?.projectId ?? 'bd5bc628-9fdd-4f3c-96d0-4b08e2daec19';
 
 const PUSH_TOKEN_STORAGE_KEY = '@finchwire_push_token';
 
@@ -62,7 +67,7 @@ class PushNotificationsService {
       });
     }
 
-    const tokenResponse = await Notifications.getExpoPushTokenAsync();
+    const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId: EXPO_PROJECT_ID });
     const token = tokenResponse.data;
     if (!token) {
       throw new Error('Could not retrieve Expo push token.');
