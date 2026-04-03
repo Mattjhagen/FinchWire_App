@@ -28,12 +28,47 @@ import { MediaJob } from '../../src/types';
 
 const PLAYER_POSITION_KEY = '@finchwire_player_positions_v1';
 const PLAYER_PREFS_KEY = '@finchwire_player_prefs_v1';
+const decodeParam = (value?: string | string[]): string => {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return '';
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return String(raw);
+  }
+};
+const toSharedMediaTitle = (url: string, fallback?: string): string => {
+  const fallbackTitle = fallback?.trim();
+  if (fallbackTitle) return fallbackTitle;
+
+  try {
+    const parsed = new URL(url);
+    const fileName = decodeURIComponent(parsed.pathname.split('/').filter(Boolean).pop() || 'Shared media');
+    return fileName.replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[_-]+/g, ' ').trim() || 'Shared media';
+  } catch {
+    return 'Shared media';
+  }
+};
+const toSharedMediaDomain = (url: string): string => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return 'shared';
+  }
+};
 
 export default function PlayerScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, url: sharedUrlParam, title: sharedTitleParam } = useLocalSearchParams<{
+    id: string;
+    url?: string;
+    title?: string;
+  }>();
   const router = useRouter();
   const videoViewRef = useRef<VideoView>(null);
   const { authToken } = useAuthStore();
+  const sharedPlaybackUrl = decodeParam(sharedUrlParam);
+  const sharedTitle = decodeParam(sharedTitleParam);
+  const isSharedExternal = id === 'shared' && !!sharedPlaybackUrl;
   
   const [media, setMedia] = useState<MediaJob | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,20 +96,22 @@ export default function PlayerScreen() {
   const rightTapAtRef = useRef(0);
 
   const mediaHeaders = useMemo(() => {
-    if (!media || localPath || !authToken) {
+    if (!media || localPath || !authToken || isSharedExternal) {
       return undefined;
     }
     return apiService.getMediaRequestHeaders();
-  }, [authToken, localPath, media]);
+  }, [authToken, isSharedExternal, localPath, media]);
 
   const mediaPath = useMemo(() => {
     if (!media) return '';
     return media.relative_path || media.safe_filename || media.media_url || '';
   }, [media]);
 
-  const playbackUrl = media
-    ? localPath || apiService.getAuthenticatedMediaUrl(mediaPath)
-    : null;
+  const playbackUrl = isSharedExternal
+    ? sharedPlaybackUrl
+    : media
+      ? localPath || apiService.getAuthenticatedMediaUrl(mediaPath)
+      : null;
 
   const videoSource = useMemo(() => {
     if (!playbackUrl) {
@@ -151,6 +188,37 @@ export default function PlayerScreen() {
   });
 
   const loadMedia = useCallback(async () => {
+    if (isSharedExternal && sharedPlaybackUrl) {
+      const sharedMedia: MediaJob = {
+        id: `shared:${sharedPlaybackUrl}`,
+        url: sharedPlaybackUrl,
+        original_url: sharedPlaybackUrl,
+        status: 'completed',
+        progress_percent: 100,
+        downloaded_bytes: 0,
+        total_bytes: 0,
+        filename: toSharedMediaTitle(sharedPlaybackUrl, sharedTitle),
+        safe_filename: '',
+        relative_path: '',
+        absolute_path: '',
+        mime_type: '',
+        file_size: 0,
+        source_domain: toSharedMediaDomain(sharedPlaybackUrl),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        is_audio: false,
+        view_count: 0,
+      };
+
+      setPlaylist([]);
+      setMedia(sharedMedia);
+      setLocalPath(null);
+      hasAppliedResumeRef.current = false;
+      endedHandledRef.current = false;
+      setIsLoading(false);
+      return;
+    }
+
     let resolvedMedia: MediaJob | null = null;
 
     try {
@@ -184,7 +252,7 @@ export default function PlayerScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [id]);
+  }, [id, isSharedExternal, sharedPlaybackUrl, sharedTitle]);
 
   useEffect(() => {
     loadMedia();
@@ -406,13 +474,18 @@ export default function PlayerScreen() {
   }, [isPiPSupported]);
 
   const handleDownload = async () => {
-    if (!media || !authToken) return;
+    if (!media) return;
+    if (isSharedExternal && !sharedPlaybackUrl) return;
 
     setIsDownloading(true);
     try {
-      const mediaHeaders = apiService.getMediaRequestHeaders();
-      const mediaUrl = await apiService.getShareMediaUrl(media.id, mediaPath);
-      const localName = media.safe_filename || media.relative_path || `${media.id}.mp4`;
+      const mediaHeaders = isSharedExternal ? undefined : apiService.getMediaRequestHeaders();
+      const mediaUrl = isSharedExternal
+        ? sharedPlaybackUrl
+        : await apiService.getShareMediaUrl(media.id, mediaPath);
+      const localName = media.safe_filename
+        || media.relative_path
+        || (media.filename ? `${media.filename}.mp4` : `${media.id}.mp4`);
 
       const localUri = await downloadService.downloadMedia(
         media.id,
@@ -449,7 +522,9 @@ export default function PlayerScreen() {
   const handleShare = async () => {
     if (!media) return;
 
-    const mediaUrl = await apiService.getShareMediaUrl(media.id, mediaPath);
+    const mediaUrl = isSharedExternal && sharedPlaybackUrl
+      ? sharedPlaybackUrl
+      : await apiService.getShareMediaUrl(media.id, mediaPath);
     try {
       await Share.share({
         message: `Watch ${media.filename}: ${mediaUrl}`,
@@ -465,7 +540,9 @@ export default function PlayerScreen() {
     try {
       setIsLaunchingExternalPlayer(true);
       player.pause();
-      const vlcUrl = apiService.getVlcUrl(mediaPath);
+      const vlcUrl = isSharedExternal && sharedPlaybackUrl
+        ? `vlc://${sharedPlaybackUrl}`
+        : apiService.getVlcUrl(mediaPath);
       const canOpen = await Linking.canOpenURL(vlcUrl);
       if (!canOpen) {
         Alert.alert('VLC not found', 'Install VLC to open this media externally.');
@@ -477,7 +554,7 @@ export default function PlayerScreen() {
     } finally {
       setTimeout(() => setIsLaunchingExternalPlayer(false), 1500);
     }
-  }, [media, mediaPath, player]);
+  }, [isSharedExternal, media, mediaPath, player, sharedPlaybackUrl]);
 
   const handleToggleKeepDownload = async () => {
     if (!media || isUpdatingKeep) return;
@@ -682,34 +759,36 @@ export default function PlayerScreen() {
 
         {/* Actions */}
         <View style={styles.actionsContainer}>
-          <View style={styles.queueControlsRow}>
-            <TouchableOpacity
-              style={[styles.toggleChip, autoplayEnabled && styles.toggleChipActive]}
-              onPress={() => setAutoplayEnabled((prev) => !prev)}
-            >
-              <Ionicons
-                name={autoplayEnabled ? 'play-forward-circle' : 'play-forward-circle-outline'}
-                size={18}
-                color={autoplayEnabled ? colors.buttonText : colors.textSecondary}
-              />
-              <Text style={[styles.toggleChipText, autoplayEnabled && styles.toggleChipTextActive]}>
-                Autoplay Next
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.toggleChip, shuffleEnabled && styles.toggleChipActive]}
-              onPress={() => setShuffleEnabled((prev) => !prev)}
-            >
-              <Ionicons
-                name={shuffleEnabled ? 'shuffle' : 'shuffle-outline'}
-                size={18}
-                color={shuffleEnabled ? colors.buttonText : colors.textSecondary}
-              />
-              <Text style={[styles.toggleChipText, shuffleEnabled && styles.toggleChipTextActive]}>
-                Shuffle
-              </Text>
-            </TouchableOpacity>
-          </View>
+          {!isSharedExternal && (
+            <View style={styles.queueControlsRow}>
+              <TouchableOpacity
+                style={[styles.toggleChip, autoplayEnabled && styles.toggleChipActive]}
+                onPress={() => setAutoplayEnabled((prev) => !prev)}
+              >
+                <Ionicons
+                  name={autoplayEnabled ? 'play-forward-circle' : 'play-forward-circle-outline'}
+                  size={18}
+                  color={autoplayEnabled ? colors.buttonText : colors.textSecondary}
+                />
+                <Text style={[styles.toggleChipText, autoplayEnabled && styles.toggleChipTextActive]}>
+                  Autoplay Next
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleChip, shuffleEnabled && styles.toggleChipActive]}
+                onPress={() => setShuffleEnabled((prev) => !prev)}
+              >
+                <Ionicons
+                  name={shuffleEnabled ? 'shuffle' : 'shuffle-outline'}
+                  size={18}
+                  color={shuffleEnabled ? colors.buttonText : colors.textSecondary}
+                />
+                <Text style={[styles.toggleChipText, shuffleEnabled && styles.toggleChipTextActive]}>
+                  Shuffle
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Download Button */}
           {!localPath && (
@@ -752,37 +831,41 @@ export default function PlayerScreen() {
             <Text style={styles.actionButtonTextSecondary}>Share</Text>
           </TouchableOpacity>
 
-          {/* Keep / Unkeep for retention */}
-          <TouchableOpacity
-            style={styles.actionButtonSecondary}
-            onPress={handleToggleKeepDownload}
-            disabled={isUpdatingKeep}
-          >
-            <Ionicons
-              name={isKeptDownload ? 'bookmark' : 'bookmark-outline'}
-              size={24}
-              color={colors.text}
-            />
-            <Text style={styles.actionButtonTextSecondary}>
-              {isUpdatingKeep
-                ? 'Updating...'
-                : isKeptDownload
-                  ? 'Allow Auto-Delete'
-                  : 'Keep Download'}
-            </Text>
-          </TouchableOpacity>
+          {!isSharedExternal && (
+            <>
+              {/* Keep / Unkeep for retention */}
+              <TouchableOpacity
+                style={styles.actionButtonSecondary}
+                onPress={handleToggleKeepDownload}
+                disabled={isUpdatingKeep}
+              >
+                <Ionicons
+                  name={isKeptDownload ? 'bookmark' : 'bookmark-outline'}
+                  size={24}
+                  color={colors.text}
+                />
+                <Text style={styles.actionButtonTextSecondary}>
+                  {isUpdatingKeep
+                    ? 'Updating...'
+                    : isKeptDownload
+                      ? 'Allow Auto-Delete'
+                      : 'Keep Download'}
+                </Text>
+              </TouchableOpacity>
 
-          {/* Delete */}
-          <TouchableOpacity
-            style={styles.actionButtonDanger}
-            onPress={handleDeleteFromServer}
-            disabled={isDeleting}
-          >
-            <Ionicons name="trash-outline" size={24} color={colors.error} />
-            <Text style={styles.actionButtonTextDanger}>
-              {isDeleting ? 'Deleting...' : 'Delete from Server'}
-            </Text>
-          </TouchableOpacity>
+              {/* Delete */}
+              <TouchableOpacity
+                style={styles.actionButtonDanger}
+                onPress={handleDeleteFromServer}
+                disabled={isDeleting}
+              >
+                <Ionicons name="trash-outline" size={24} color={colors.error} />
+                <Text style={styles.actionButtonTextDanger}>
+                  {isDeleting ? 'Deleting...' : 'Delete from Server'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
 
           {!media.is_audio && (
             <TouchableOpacity

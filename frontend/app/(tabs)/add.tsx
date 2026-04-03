@@ -1,5 +1,5 @@
 // Add Screen - Download new media
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,37 +11,48 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, borderRadius } from '../../src/utils/theme';
 import { apiService } from '../../src/services/api';
 import { personalizationService } from '../../src/services/personalization';
 
 const looksLikeUrl = (value: string): boolean => /^https?:\/\/\S+/i.test(value.trim());
+const decodeParam = (value?: string | string[]): string => {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return '';
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return String(raw);
+  }
+};
 
 export default function AddScreen() {
   const router = useRouter();
+  const { sharedUrl, autoStart } = useLocalSearchParams<{ sharedUrl?: string; autoStart?: string }>();
   const [url, setUrl] = useState('');
   const [isAudioOnly, setIsAudioOnly] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const lastAutoQueuedUrlRef = useRef<string | null>(null);
 
-  const handleDownload = async () => {
-    if (!url.trim()) {
+  const submitDownloadRequest = useCallback(async (inputUrl: string) => {
+    const value = inputUrl.trim();
+    if (!value) {
       Alert.alert('Error', 'Please enter a video URL or search phrase');
       return;
     }
 
     setIsLoading(true);
     try {
-      const trimmedValue = url.trim();
-      if (!looksLikeUrl(trimmedValue)) {
-        personalizationService.recordAiPrompt(trimmedValue).catch(() => {
+      if (!looksLikeUrl(value)) {
+        personalizationService.recordAiPrompt(value).catch(() => {
           // Non-blocking signal for Discover personalization.
         });
       }
 
       const response = await apiService.submitDownload({
-        url: trimmedValue,
+        url: value,
         is_audio: isAudioOnly,
       });
 
@@ -72,7 +83,26 @@ export default function AddScreen() {
     } finally {
       setIsLoading(false);
     }
+  }, [isAudioOnly, router]);
+
+  const handleDownload = async () => {
+    await submitDownloadRequest(url);
   };
+
+  useEffect(() => {
+    const incomingUrl = decodeParam(sharedUrl);
+    if (!incomingUrl || !looksLikeUrl(incomingUrl)) return;
+
+    setUrl(incomingUrl);
+    if (autoStart !== '1') return;
+
+    if (lastAutoQueuedUrlRef.current === incomingUrl || isLoading) {
+      return;
+    }
+
+    lastAutoQueuedUrlRef.current = incomingUrl;
+    void submitDownloadRequest(incomingUrl);
+  }, [autoStart, isLoading, sharedUrl, submitDownloadRequest]);
 
   return (
     <KeyboardAvoidingView
