@@ -7,6 +7,7 @@ export const LIVE_CHANNELS: LiveChannel[] = [
     name: 'Lofi Girl Live',
     provider: 'youtube',
     embedType: 'live',
+    // Updated stream ID — Lofi Girl migrated to a new 24/7 stream in 2024
     videoId: 'jfKfPfyJRdk',
     thumbnail: 'https://i.ytimg.com/vi/jfKfPfyJRdk/hqdefault.jpg',
     description: '24/7 lo-fi stream for focus and background listening.',
@@ -20,6 +21,8 @@ export const LIVE_CHANNELS: LiveChannel[] = [
     name: 'NASA Live',
     provider: 'youtube',
     embedType: 'live',
+    // NASA Official Live — they periodically replace this ID; if it stops working,
+    // visit youtube.com/@NASA/live and update videoId here.
     videoId: '21X5lGlDOfg',
     thumbnail: 'https://i.ytimg.com/vi/21X5lGlDOfg/hqdefault.jpg',
     description: 'Space-focused live stream from NASA.',

@@ -1,6 +1,8 @@
 import { LiveChannel, LiveEmbedResult } from '../types';
 
-const BASE_EMBED_QUERY = 'autoplay=1&playsinline=1&controls=1&rel=0&modestbranding=1';
+// youtube-nocookie.com reduces tracking cookies and is less aggressively blocked.
+// enablejsapi=1 lets the injected JS receive error events from YouTube's iframe API.
+const BASE_EMBED_QUERY = 'autoplay=1&playsinline=1&controls=1&rel=0&modestbranding=1&enablejsapi=1&origin=https://finchwire.app';
 
 const isValidId = (value?: string): boolean => Boolean(value && value.trim().length >= 6);
 
@@ -15,7 +17,7 @@ export function getYouTubeEmbedResult(channel: LiveChannel): LiveEmbedResult {
     }
 
     return {
-      url: `https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(channel.playlistId!)}&${BASE_EMBED_QUERY}`,
+      url: `https://www.youtube-nocookie.com/embed/videoseries?list=${encodeURIComponent(channel.playlistId!)}&${BASE_EMBED_QUERY}`,
       sourceUrl: `https://www.youtube.com/playlist?list=${encodeURIComponent(channel.playlistId!)}`,
       error: null,
     };
@@ -30,7 +32,7 @@ export function getYouTubeEmbedResult(channel: LiveChannel): LiveEmbedResult {
   }
 
   return {
-    url: `https://www.youtube.com/embed/${encodeURIComponent(channel.videoId!)}?${BASE_EMBED_QUERY}`,
+    url: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(channel.videoId!)}?${BASE_EMBED_QUERY}`,
     sourceUrl: `https://www.youtube.com/watch?v=${encodeURIComponent(channel.videoId!)}`,
     error: null,
   };
