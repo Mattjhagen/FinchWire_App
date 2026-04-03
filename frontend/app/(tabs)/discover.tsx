@@ -22,6 +22,35 @@ const prettyScore = (value?: number) => {
   return value.toFixed(1);
 };
 
+const decodeHtmlEntities = (value: string): string => {
+  return String(value || '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+};
+
+const compactSummary = (summary: string, fallbackTitle?: string): string => {
+  const normalized = decodeHtmlEntities(summary)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const base = normalized || String(fallbackTitle || '').trim();
+  if (!base) return 'No summary available.';
+
+  const sentences = base
+    .split(/(?<=[.!?])\s+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const topTwo = sentences.slice(0, 2).join(' ').trim();
+  if (topTwo) return topTwo.length > 280 ? `${topTwo.slice(0, 277).trim()}...` : topTwo;
+
+  return base.length > 200 ? `${base.slice(0, 197).trim()}...` : base;
+};
+
 export default function DiscoverScreen() {
   const router = useRouter();
 
@@ -59,6 +88,9 @@ export default function DiscoverScreen() {
         url: encodeURIComponent(item.url),
         title: encodeURIComponent(item.title),
         source: encodeURIComponent(item.source),
+        storyId: item.id,
+        topics: encodeURIComponent(JSON.stringify(item.topics || [])),
+        keywords: encodeURIComponent(JSON.stringify(item.keywords || [])),
       },
     });
   };
@@ -218,7 +250,9 @@ function StoryCard({
           </Text>
         </View>
         <Text style={styles.cardTitle} numberOfLines={3}>{item.title}</Text>
-        <Text style={styles.cardSummary} numberOfLines={3}>{item.summary || 'No summary available.'}</Text>
+        <Text style={styles.cardSummary} numberOfLines={3}>
+          {compactSummary(item.summary || '', item.title)}
+        </Text>
 
         <View style={styles.scoreRow}>
           <ScoreBadge label="Hotness" value={prettyScore(item.hotnessScore)} />
@@ -235,9 +269,13 @@ function StoryCard({
         </View>
 
         <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.primaryBtn} onPress={onOpenSource}>
-            <Ionicons name="open-outline" size={14} color={colors.buttonText} />
-            <Text style={styles.primaryBtnText}>Open Source</Text>
+          <TouchableOpacity style={styles.primaryBtn} onPress={onOpen}>
+            <Ionicons name="reader-outline" size={14} color={colors.buttonText} />
+            <Text style={styles.primaryBtnText}>Read In App</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onOpenSource}>
+            <Ionicons name="open-outline" size={14} color={colors.text} />
+            <Text style={styles.secondaryBtnText}>Open Source</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryBtn} onPress={onLike}>
             <Ionicons name="thumbs-up-outline" size={14} color={colors.text} />
