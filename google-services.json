@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "153063272915",
+    "project_id": "finchwire-55e02",
+    "storage_bucket": "finchwire-55e02.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:153063272915:android:cc6cbbb4f97535dd953f26",
+        "android_client_info": {
+          "package_name": "com.finchwire.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_tChcA6UWHnHPIIs_eOmyv9NCKd4G5FM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -20,13 +20,23 @@ import { apiService } from '../../src/services/api';
 import { appLockService } from '../../src/services/appLockService';
 import { pushNotificationsService } from '../../src/services/pushNotifications';
 import { APP_LOCK_TIMEOUT_OPTIONS } from '../../src/features/app-lock/policy';
-import { AiProvider, AppLockTimeout, AssetType, NotificationPreferences, TtsProvider } from '../../src/types';
+import {
+  AiProvider,
+  AppLockTimeout,
+  AssetType,
+  MarketProvider,
+  NotificationPreferences,
+  ServerRuntimeSettings,
+  TtsProvider,
+  WeatherProvider,
+} from '../../src/types';
 
 const AI_PROVIDER_OPTIONS: { label: string; value: AiProvider }[] = [
   { label: 'None', value: 'none' },
   { label: 'Gemini', value: 'gemini' },
   { label: 'OpenAI', value: 'openai' },
   { label: 'Anthropic', value: 'anthropic' },
+  { label: 'Grok (xAI)', value: 'grok' },
   { label: 'Groq', value: 'groq' },
 ];
 
@@ -35,6 +45,16 @@ const TTS_PROVIDER_OPTIONS: { label: string; value: TtsProvider }[] = [
   { label: 'Gemini', value: 'gemini' },
   { label: 'OpenAI', value: 'openai' },
   { label: 'ElevenLabs', value: 'elevenlabs' },
+];
+
+const WEATHER_PROVIDER_OPTIONS: { label: string; value: WeatherProvider }[] = [
+  { label: 'Open-Meteo (free)', value: 'open_meteo' },
+  { label: 'WeatherAPI (key)', value: 'weatherapi' },
+];
+
+const MARKET_PROVIDER_OPTIONS: { label: string; value: MarketProvider }[] = [
+  { label: 'CoinGecko + Yahoo (free)', value: 'coingecko_yahoo' },
+  { label: 'Finnhub (key)', value: 'finnhub' },
 ];
 
 const DEFAULT_NOTIFICATION_PREFS: NotificationPreferences = {
@@ -79,7 +99,20 @@ export default function SettingsScreen() {
   const [ttsApiKey, setTtsApiKey] = React.useState('');
   const [hasAiApiKey, setHasAiApiKey] = React.useState(Boolean(settings?.has_ai_api_key));
   const [hasTtsApiKey, setHasTtsApiKey] = React.useState(Boolean(settings?.has_tts_api_key));
+  const [weatherProvider, setWeatherProvider] = React.useState<WeatherProvider>(settings?.weather_provider || 'open_meteo');
+  const [marketProvider, setMarketProvider] = React.useState<MarketProvider>(settings?.market_provider || 'coingecko_yahoo');
+  const [weatherApiKey, setWeatherApiKey] = React.useState('');
+  const [marketApiKey, setMarketApiKey] = React.useState('');
+  const [youtubeApiKey, setYoutubeApiKey] = React.useState('');
+  const [hasWeatherApiKey, setHasWeatherApiKey] = React.useState(Boolean(settings?.has_weather_api_key));
+  const [hasMarketApiKey, setHasMarketApiKey] = React.useState(Boolean(settings?.has_market_api_key));
+  const [hasYoutubeApiKey, setHasYoutubeApiKey] = React.useState(Boolean(settings?.has_youtube_api_key));
+  const [weatherLocation, setWeatherLocation] = React.useState(settings?.weather_location || 'Omaha, NE');
+  const [weatherLat, setWeatherLat] = React.useState(settings?.weather_lat || '41.2565');
+  const [weatherLon, setWeatherLon] = React.useState(settings?.weather_lon || '-95.9345');
   const [isSavingProviders, setIsSavingProviders] = React.useState(false);
+  const [isSavingAdvanced, setIsSavingAdvanced] = React.useState(false);
+  const [isTestingAi, setIsTestingAi] = React.useState(false);
   const [notificationPrefs, setNotificationPrefs] = React.useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFS);
   const [isSavingNotificationPrefs, setIsSavingNotificationPrefs] = React.useState(false);
   const [isRegisteringPush, setIsRegisteringPush] = React.useState(false);
@@ -101,6 +134,14 @@ export default function SettingsScreen() {
     setTtsProvider(settings.tts_provider || 'none');
     setHasAiApiKey(Boolean(settings.has_ai_api_key));
     setHasTtsApiKey(Boolean(settings.has_tts_api_key));
+    setWeatherProvider(settings.weather_provider || 'open_meteo');
+    setMarketProvider(settings.market_provider || 'coingecko_yahoo');
+    setHasWeatherApiKey(Boolean(settings.has_weather_api_key));
+    setHasMarketApiKey(Boolean(settings.has_market_api_key));
+    setHasYoutubeApiKey(Boolean(settings.has_youtube_api_key));
+    setWeatherLocation(settings.weather_location || 'Omaha, NE');
+    setWeatherLat(settings.weather_lat || '41.2565');
+    setWeatherLon(settings.weather_lon || '-95.9345');
   }, [settings]);
 
   const resetPinFlowState = React.useCallback(() => {
@@ -156,6 +197,14 @@ export default function SettingsScreen() {
         setTtsProvider(serverSettings.tts_provider);
         setHasAiApiKey(serverSettings.has_ai_api_key);
         setHasTtsApiKey(serverSettings.has_tts_api_key);
+        setWeatherProvider(serverSettings.weather_provider || 'open_meteo');
+        setMarketProvider(serverSettings.market_provider || 'coingecko_yahoo');
+        setHasWeatherApiKey(Boolean(serverSettings.has_weather_api_key));
+        setHasMarketApiKey(Boolean(serverSettings.has_market_api_key));
+        setHasYoutubeApiKey(Boolean(serverSettings.has_youtube_api_key));
+        setWeatherLocation(serverSettings.weather_location || 'Omaha, NE');
+        setWeatherLat(serverSettings.weather_lat || '41.2565');
+        setWeatherLon(serverSettings.weather_lon || '-95.9345');
         setNotificationPrefs({ ...DEFAULT_NOTIFICATION_PREFS, ...prefs });
         setPushToken(storedPushToken);
       } catch {
@@ -169,12 +218,7 @@ export default function SettingsScreen() {
     };
   }, [settings?.backend_url]);
 
-  const persistProviderState = async (next: {
-    ai_provider: AiProvider;
-    tts_provider: TtsProvider;
-    has_ai_api_key: boolean;
-    has_tts_api_key: boolean;
-  }) => {
+  const persistServerSettingsState = async (next: ServerRuntimeSettings) => {
     if (!settings) return;
     await saveSettings({
       ...settings,
@@ -182,6 +226,14 @@ export default function SettingsScreen() {
       tts_provider: next.tts_provider,
       has_ai_api_key: next.has_ai_api_key,
       has_tts_api_key: next.has_tts_api_key,
+      weather_provider: next.weather_provider || 'open_meteo',
+      market_provider: next.market_provider || 'coingecko_yahoo',
+      has_weather_api_key: Boolean(next.has_weather_api_key),
+      has_market_api_key: Boolean(next.has_market_api_key),
+      has_youtube_api_key: Boolean(next.has_youtube_api_key),
+      weather_location: next.weather_location || 'Omaha, NE',
+      weather_lat: next.weather_lat || '41.2565',
+      weather_lon: next.weather_lon || '-95.9345',
     });
   };
 
@@ -258,7 +310,7 @@ export default function SettingsScreen() {
       setAiApiKey('');
       setTtsApiKey('');
 
-      await persistProviderState(updated);
+      await persistServerSettingsState(updated);
       Alert.alert('Saved', 'AI/TTS provider settings have been saved to your server.');
     } catch (error: any) {
       Alert.alert('Save failed', error?.message || 'Could not save AI/TTS settings.');
@@ -267,17 +319,83 @@ export default function SettingsScreen() {
     }
   };
 
-  const clearServerKey = async (kind: 'ai' | 'tts') => {
+  const clearServerKey = async (kind: 'ai' | 'tts' | 'weather' | 'market' | 'youtube') => {
     if (!settings) return;
     try {
-      const payload = kind === 'ai' ? { ai_api_key: '' } : { tts_api_key: '' };
+      const payload = kind === 'ai'
+        ? { ai_api_key: '' }
+        : kind === 'tts'
+          ? { tts_api_key: '' }
+          : kind === 'weather'
+            ? { weather_api_key: '' }
+            : kind === 'market'
+              ? { market_api_key: '' }
+              : { youtube_api_key: '' };
       const updated = await apiService.updateServerSettings(payload);
       setHasAiApiKey(updated.has_ai_api_key);
       setHasTtsApiKey(updated.has_tts_api_key);
-      await persistProviderState(updated);
+      setHasWeatherApiKey(Boolean(updated.has_weather_api_key));
+      setHasMarketApiKey(Boolean(updated.has_market_api_key));
+      setHasYoutubeApiKey(Boolean(updated.has_youtube_api_key));
+      await persistServerSettingsState(updated);
       Alert.alert('Cleared', `${kind.toUpperCase()} key removed from server.`);
     } catch (error: any) {
       Alert.alert('Clear failed', error?.message || 'Could not clear key.');
+    }
+  };
+
+  const handleSaveAdvancedRuntime = async () => {
+    setIsSavingAdvanced(true);
+    try {
+      const updated = await apiService.updateServerSettings({
+        weather_provider: weatherProvider,
+        market_provider: marketProvider,
+        weather_location: weatherLocation.trim() || 'Omaha, NE',
+        weather_lat: weatherLat.trim(),
+        weather_lon: weatherLon.trim(),
+        ...(weatherApiKey.trim() ? { weather_api_key: weatherApiKey.trim() } : {}),
+        ...(marketApiKey.trim() ? { market_api_key: marketApiKey.trim() } : {}),
+        ...(youtubeApiKey.trim() ? { youtube_api_key: youtubeApiKey.trim() } : {}),
+      });
+
+      setWeatherProvider(updated.weather_provider || 'open_meteo');
+      setMarketProvider(updated.market_provider || 'coingecko_yahoo');
+      setHasWeatherApiKey(Boolean(updated.has_weather_api_key));
+      setHasMarketApiKey(Boolean(updated.has_market_api_key));
+      setHasYoutubeApiKey(Boolean(updated.has_youtube_api_key));
+      setWeatherLocation(updated.weather_location || 'Omaha, NE');
+      setWeatherLat(updated.weather_lat || '41.2565');
+      setWeatherLon(updated.weather_lon || '-95.9345');
+      setWeatherApiKey('');
+      setMarketApiKey('');
+      setYoutubeApiKey('');
+
+      await persistServerSettingsState(updated);
+      Alert.alert('Saved', 'Advanced runtime settings are now stored on your backend.');
+    } catch (error: any) {
+      Alert.alert('Save failed', error?.message || 'Could not save advanced runtime settings.');
+    } finally {
+      setIsSavingAdvanced(false);
+    }
+  };
+
+  const handleTestAiConnection = async () => {
+    setIsTestingAi(true);
+    try {
+      const result = await apiService.runAiSearch(
+        'Summarize my current media interests and give one podcast suggestion.'
+      );
+      Alert.alert(
+        `AI test passed (${String(result.provider || aiProvider).toUpperCase()})`,
+        `${String(result.answer || 'No answer returned.')}\n\nQuery: ${String(result.query || '').trim() || 'n/a'}`
+      );
+    } catch (error: any) {
+      Alert.alert(
+        'AI test failed',
+        `${String(error?.message || 'Request failed.')}\n\nConfirm provider + API key are saved and valid.`
+      );
+    } finally {
+      setIsTestingAi(false);
     }
   };
 
@@ -312,7 +430,7 @@ export default function SettingsScreen() {
       setPushToken(token);
       Alert.alert('Push enabled', 'This device is now subscribed for FinchWire alerts.');
     } catch (error: any) {
-      Alert.alert('Push setup failed', error?.message || 'Could not enable push notifications.');
+      Alert.alert('Push setup failed', pushNotificationsService.formatRegistrationError(error));
     } finally {
       setIsRegisteringPush(false);
     }
@@ -1110,6 +1228,194 @@ export default function SettingsScreen() {
           >
             <Text style={styles.primaryActionText}>
               {isSavingProviders ? 'Saving...' : 'Save AI/TTS Settings'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.secondaryActionButton, isTestingAi && styles.buttonDisabled, { marginTop: spacing.sm }]}
+            onPress={handleTestAiConnection}
+            disabled={isTestingAi}
+          >
+            <Text style={styles.secondaryActionText}>
+              {isTestingAi ? 'Testing AI...' : 'Test AI Connection'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Advanced Runtime (Personal)</Text>
+        <View style={styles.card}>
+          <Text style={styles.rowDescription}>
+            Configure weather + market providers and API keys here instead of editing backend env files.
+          </Text>
+
+          <Text style={styles.inlineLabel}>Weather Provider</Text>
+          <View style={styles.chipWrap}>
+            {WEATHER_PROVIDER_OPTIONS.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.providerChip,
+                  weatherProvider === option.value && styles.providerChipActive,
+                ]}
+                onPress={() => setWeatherProvider(option.value)}
+              >
+                <Text
+                  style={[
+                    styles.providerChipText,
+                    weatherProvider === option.value && styles.providerChipTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.inlineLabel}>Weather Location Label / Query</Text>
+          <TextInput
+            style={styles.textInput}
+            value={weatherLocation}
+            onChangeText={setWeatherLocation}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="Omaha, NE"
+            placeholderTextColor={colors.textTertiary}
+          />
+
+          <Text style={styles.inlineLabel}>Weather Latitude</Text>
+          <TextInput
+            style={styles.textInput}
+            value={weatherLat}
+            onChangeText={setWeatherLat}
+            keyboardType="numbers-and-punctuation"
+            placeholder="41.2565"
+            placeholderTextColor={colors.textTertiary}
+          />
+
+          <Text style={styles.inlineLabel}>Weather Longitude</Text>
+          <TextInput
+            style={styles.textInput}
+            value={weatherLon}
+            onChangeText={setWeatherLon}
+            keyboardType="numbers-and-punctuation"
+            placeholder="-95.9345"
+            placeholderTextColor={colors.textTertiary}
+          />
+
+          <Text style={styles.inlineLabel}>Weather API Key</Text>
+          <TextInput
+            style={styles.textInput}
+            value={weatherApiKey}
+            onChangeText={setWeatherApiKey}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+            placeholder={
+              hasWeatherApiKey
+                ? 'Key saved on server (enter new key to replace)'
+                : 'Required only for WeatherAPI provider'
+            }
+            placeholderTextColor={colors.textTertiary}
+          />
+          <View style={styles.statusRow}>
+            <Text style={styles.keyStatusText}>
+              Weather key status: {hasWeatherApiKey ? 'Saved on server' : 'Not set'}
+            </Text>
+            {hasWeatherApiKey ? (
+              <TouchableOpacity onPress={() => clearServerKey('weather')}>
+                <Text style={styles.linkDanger}>Clear</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <View style={styles.divider} />
+
+          <Text style={styles.inlineLabel}>Market Provider</Text>
+          <View style={styles.chipWrap}>
+            {MARKET_PROVIDER_OPTIONS.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.providerChip,
+                  marketProvider === option.value && styles.providerChipActive,
+                ]}
+                onPress={() => setMarketProvider(option.value)}
+              >
+                <Text
+                  style={[
+                    styles.providerChipText,
+                    marketProvider === option.value && styles.providerChipTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.inlineLabel}>Market API Key</Text>
+          <TextInput
+            style={styles.textInput}
+            value={marketApiKey}
+            onChangeText={setMarketApiKey}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+            placeholder={
+              hasMarketApiKey
+                ? 'Key saved on server (enter new key to replace)'
+                : 'Required only for Finnhub provider'
+            }
+            placeholderTextColor={colors.textTertiary}
+          />
+          <View style={styles.statusRow}>
+            <Text style={styles.keyStatusText}>
+              Market key status: {hasMarketApiKey ? 'Saved on server' : 'Not set'}
+            </Text>
+            {hasMarketApiKey ? (
+              <TouchableOpacity onPress={() => clearServerKey('market')}>
+                <Text style={styles.linkDanger}>Clear</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <View style={styles.divider} />
+
+          <Text style={styles.inlineLabel}>YouTube Data API Key (Creator/Live Alerts)</Text>
+          <TextInput
+            style={styles.textInput}
+            value={youtubeApiKey}
+            onChangeText={setYoutubeApiKey}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+            placeholder={
+              hasYoutubeApiKey
+                ? 'Key saved on server (enter new key to replace)'
+                : 'Used for creator live/upload monitoring'
+            }
+            placeholderTextColor={colors.textTertiary}
+          />
+          <View style={styles.statusRow}>
+            <Text style={styles.keyStatusText}>
+              YouTube key status: {hasYoutubeApiKey ? 'Saved on server' : 'Not set'}
+            </Text>
+            {hasYoutubeApiKey ? (
+              <TouchableOpacity onPress={() => clearServerKey('youtube')}>
+                <Text style={styles.linkDanger}>Clear</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.primaryActionButton, isSavingAdvanced && styles.buttonDisabled]}
+            onPress={handleSaveAdvancedRuntime}
+            disabled={isSavingAdvanced}
+          >
+            <Text style={styles.primaryActionText}>
+              {isSavingAdvanced ? 'Saving...' : 'Save Advanced Runtime Settings'}
             </Text>
           </TouchableOpacity>
         </View>

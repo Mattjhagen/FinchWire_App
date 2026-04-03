@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS, DEFAULT_BACKEND_URL, DEFAULT_RETENTION_DAYS } from '../utils/constants';
-import { AiProvider, AppLockTimeout, AppSettings, AssetType, HomeTileType, RssFeedEntry, TemperatureUnit, TtsProvider } from '../types';
+import { AiProvider, AppLockTimeout, AppSettings, AssetType, HomeTileType, MarketProvider, RssFeedEntry, TemperatureUnit, TtsProvider, WeatherProvider } from '../types';
 
 interface SettingsState {
   settings: AppSettings | null;
@@ -13,8 +13,10 @@ interface SettingsState {
   updatePassword: (password: string) => Promise<void>;
 }
 
-const ALLOWED_AI_PROVIDERS: AiProvider[] = ['none', 'gemini', 'openai', 'anthropic', 'groq'];
+const ALLOWED_AI_PROVIDERS: AiProvider[] = ['none', 'gemini', 'openai', 'anthropic', 'groq', 'grok'];
 const ALLOWED_TTS_PROVIDERS: TtsProvider[] = ['none', 'gemini', 'openai', 'elevenlabs'];
+const ALLOWED_WEATHER_PROVIDERS: WeatherProvider[] = ['open_meteo', 'weatherapi'];
+const ALLOWED_MARKET_PROVIDERS: MarketProvider[] = ['coingecko_yahoo', 'finnhub'];
 const ALLOWED_ASSET_TYPES: AssetType[] = ['stock', 'crypto'];
 const ALLOWED_TEMP_UNITS: TemperatureUnit[] = ['f', 'c'];
 const ALLOWED_APP_LOCK_TIMEOUTS: AppLockTimeout[] = ['immediate', '1m', '5m'];
@@ -33,6 +35,14 @@ const DEFAULT_SETTINGS: AppSettings = {
   tts_provider: 'none',
   has_ai_api_key: false,
   has_tts_api_key: false,
+  weather_provider: 'open_meteo',
+  market_provider: 'coingecko_yahoo',
+  has_weather_api_key: false,
+  has_market_api_key: false,
+  has_youtube_api_key: false,
+  weather_location: 'Omaha, NE',
+  weather_lat: '41.2565',
+  weather_lon: '-95.9345',
   home_market_symbol: 'BTC',
   home_market_asset_type: 'crypto',
   home_weather_unit: 'f',
@@ -62,6 +72,12 @@ const normalizeSettings = (input: Partial<AppSettings> | null | undefined): AppS
   const ttsProvider = ALLOWED_TTS_PROVIDERS.includes(candidate.tts_provider as TtsProvider)
     ? (candidate.tts_provider as TtsProvider)
     : DEFAULT_SETTINGS.tts_provider;
+  const weatherProvider = ALLOWED_WEATHER_PROVIDERS.includes(candidate.weather_provider as WeatherProvider)
+    ? (candidate.weather_provider as WeatherProvider)
+    : DEFAULT_SETTINGS.weather_provider;
+  const marketProvider = ALLOWED_MARKET_PROVIDERS.includes(candidate.market_provider as MarketProvider)
+    ? (candidate.market_provider as MarketProvider)
+    : DEFAULT_SETTINGS.market_provider;
   const homeMarketAssetType = ALLOWED_ASSET_TYPES.includes(candidate.home_market_asset_type as AssetType)
     ? (candidate.home_market_asset_type as AssetType)
     : DEFAULT_SETTINGS.home_market_asset_type;
@@ -126,6 +142,14 @@ const normalizeSettings = (input: Partial<AppSettings> | null | undefined): AppS
     tts_provider: ttsProvider,
     has_ai_api_key: Boolean(candidate.has_ai_api_key),
     has_tts_api_key: Boolean(candidate.has_tts_api_key),
+    weather_provider: weatherProvider,
+    market_provider: marketProvider,
+    has_weather_api_key: Boolean(candidate.has_weather_api_key),
+    has_market_api_key: Boolean(candidate.has_market_api_key),
+    has_youtube_api_key: Boolean(candidate.has_youtube_api_key),
+    weather_location: String(candidate.weather_location || DEFAULT_SETTINGS.weather_location).trim() || DEFAULT_SETTINGS.weather_location,
+    weather_lat: String(candidate.weather_lat || DEFAULT_SETTINGS.weather_lat).trim() || DEFAULT_SETTINGS.weather_lat,
+    weather_lon: String(candidate.weather_lon || DEFAULT_SETTINGS.weather_lon).trim() || DEFAULT_SETTINGS.weather_lon,
     home_market_symbol: String(candidate.home_market_symbol || DEFAULT_SETTINGS.home_market_symbol).trim().toUpperCase(),
     home_market_asset_type: homeMarketAssetType,
     home_weather_unit: homeWeatherUnit,

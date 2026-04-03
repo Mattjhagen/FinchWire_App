@@ -17,6 +17,7 @@
     "android": {
       "package": "com.finchwire.app",
       "versionCode": 3,
+      "googleServicesFile": "./firebase/google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
@@ -61,7 +62,7 @@
           "disableIOS": true,
           "androidIntentFilters": [
             "text/plain",
-            "text/html",
+
             "video/*"
           ],
           "androidMultiIntentFilters": [

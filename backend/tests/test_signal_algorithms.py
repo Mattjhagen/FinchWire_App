@@ -41,3 +41,11 @@ def test_interest_vector_decay_reduces_scores_over_time():
 
     assert after < before
     assert after > 0
+
+
+def test_interest_vector_weight_scale_amplifies_engagement():
+    vector = create_interest_vector()
+    baseline = update_interest_vector(vector, "story_dwell", topics=["macro"], weight_scale=0.5)
+    boosted = update_interest_vector(vector, "story_dwell", topics=["macro"], weight_scale=2.0)
+
+    assert float(boosted["topics"]["macro"]) > float(baseline["topics"]["macro"])
