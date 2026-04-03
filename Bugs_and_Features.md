@@ -4,3 +4,4 @@
 
 add a tab at the bottom for live TV and remove the fetch tab from the bottom (its already on the homescren) also help me find the youtube API key for live feeds)
  
+treat the AI as a chatbot and make an MD file it can use the learn about the user and update and read regularily when suggesting content
