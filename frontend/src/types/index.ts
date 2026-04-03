@@ -64,6 +64,14 @@ export interface AppSettings {
   tts_provider: TtsProvider;
   has_ai_api_key: boolean;
   has_tts_api_key: boolean;
+  weather_provider: WeatherProvider;
+  market_provider: MarketProvider;
+  has_weather_api_key: boolean;
+  has_market_api_key: boolean;
+  has_youtube_api_key: boolean;
+  weather_location: string;
+  weather_lat: string;
+  weather_lon: string;
   home_market_symbol: string;
   home_market_asset_type: AssetType;
   home_weather_unit: TemperatureUnit;
@@ -77,6 +85,8 @@ export type AssetType = 'stock' | 'crypto';
 export type TemperatureUnit = 'f' | 'c';
 export type HomeTileType = 'weather' | 'market' | 'verse';
 export type AppLockTimeout = 'immediate' | '1m' | '5m';
+export type WeatherProvider = 'open_meteo' | 'weatherapi';
+export type MarketProvider = 'coingecko_yahoo' | 'finnhub';
 
 export interface HomeTilePreferences {
   weather: boolean;
@@ -85,7 +95,7 @@ export interface HomeTilePreferences {
   order: HomeTileType[];
 }
 
-export type AiProvider = 'none' | 'gemini' | 'openai' | 'anthropic' | 'groq';
+export type AiProvider = 'none' | 'gemini' | 'openai' | 'anthropic' | 'groq' | 'grok';
 export type TtsProvider = 'none' | 'gemini' | 'openai' | 'elevenlabs';
 
 export interface ServerRuntimeSettings {
@@ -93,6 +103,22 @@ export interface ServerRuntimeSettings {
   tts_provider: TtsProvider;
   has_ai_api_key: boolean;
   has_tts_api_key: boolean;
+  weather_provider: WeatherProvider;
+  market_provider: MarketProvider;
+  has_weather_api_key: boolean;
+  has_market_api_key: boolean;
+  has_youtube_api_key: boolean;
+  weather_location: string;
+  weather_lat: string;
+  weather_lon: string;
+}
+
+export interface AiSearchResponse {
+  success: boolean;
+  provider: AiProvider | string;
+  answer: string;
+  query: string;
+  suggested_url: string;
 }
 
 export interface WeatherSnapshot {

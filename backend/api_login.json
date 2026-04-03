@@ -1,0 +1,29 @@
+Note: Unnecessary use of -X or --request, POST is already inferred.
+* Host localhost:8000 was resolved.
+* IPv6: ::1
+* IPv4: 127.0.0.1
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0*   Trying [::1]:8000...
+* connect to ::1 port 8000 from ::1 port 59317 failed: Connection refused
+*   Trying 127.0.0.1:8000...
+* Connected to localhost (127.0.0.1) port 8000
+> POST /api/login HTTP/1.1
+> Host: localhost:8000
+> User-Agent: curl/8.7.1
+> Accept: */*
+> Content-Type: application/json
+> Content-Length: 20
+> 
+} [20 bytes data]
+* upload completely sent off: 20 bytes
+< HTTP/1.1 200 OK
+< date: Thu, 02 Apr 2026 01:13:03 GMT
+< server: uvicorn
+< content-length: 33
+< content-type: application/json
+< 
+{ [33 bytes data]
+100    53  100    33  100    20  14965   9070 --:--:-- --:--:-- --:--:-- 26500
+* Connection #0 to host localhost left intact
+{"success":true,"token":"bypass"}

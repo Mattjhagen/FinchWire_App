@@ -23,7 +23,7 @@ This README is intentionally up to date with the current shipped feature set.
 | Push Notifications | Expo token registration, backend subscription + delivery pipeline |
 | Creator Monitoring | YouTube creator polling with live/upload/scheduled event detection |
 | Story Intelligence | RSS ingestion, normalization, dedupe, popularity/velocity/hotness scoring |
-| Settings | Backend URL, password change, AI/TTS provider selection, API key management, notification prefs |
+| Settings | Backend URL, password change, AI/TTS provider selection (`Gemini`, `OpenAI`, `Anthropic`, `Grok`, `Groq`), API key management, notification prefs |
 | Security | Optional App Lock with biometrics + 4-6 digit PIN fallback and relock timer |
 | Live TV | `/live` route with YouTube embed channel guide and persisted channel selection |
 
@@ -119,6 +119,7 @@ backend/
 1. `GET /api/home/weather`
 2. `GET /api/home/market`
 3. `GET /api/home/verse`
+4. `POST /api/ai/search`
 
 ### Personalization + stories
 
@@ -158,6 +159,11 @@ backend/
 | `FINCHWIRE_WEATHER_LAT` | No | Weather tile latitude |
 | `FINCHWIRE_WEATHER_LON` | No | Weather tile longitude |
 | `FINCHWIRE_PROVIDER_TIMEOUT_SEC` | No | Timeout for home data providers |
+| `GEMINI_API_KEY` | Optional | Fallback key for Gemini AI provider |
+| `OPENAI_API_KEY` | Optional | Fallback key for OpenAI AI provider |
+| `ANTHROPIC_API_KEY` | Optional | Fallback key for Anthropic AI provider |
+| `XAI_API_KEY` / `GROK_API_KEY` | Optional | Fallback key for Grok (xAI) AI provider |
+| `GROQ_API_KEY` | Optional | Fallback key for Groq AI provider |
 
 ## Getting Started
 

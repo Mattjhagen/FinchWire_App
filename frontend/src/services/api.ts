@@ -1,22 +1,31 @@
 // API Service for FinchWire
 import { API_ENDPOINTS } from '../utils/constants';
 import {
+  AssetType,
+  AiSearchResponse,
   AiProvider,
   CreatorEvent,
   CreatorWatch,
   CreatorWatchPayload,
+  FeedInteractionEvent,
   FinchNotification,
   InterestProfileResponse,
   LiveStory,
   MediaJob,
   NotificationPreferences,
   NotificationPreferencesPayload,
+  PriceWatchItem,
   DownloadJobRequest,
   AuthResponse,
   SessionResponse,
   ServerRuntimeSettings,
   StoryFeedbackPayload,
+  TemperatureUnit,
   TtsProvider,
+  VerseOfDay,
+  WeatherSnapshot,
+  WeatherProvider,
+  MarketProvider,
 } from '../types';
 import { Platform } from 'react-native';
 
@@ -25,12 +34,22 @@ interface UpdateServerSettingsPayload {
   tts_provider?: TtsProvider;
   ai_api_key?: string;
   tts_api_key?: string;
+  weather_provider?: WeatherProvider;
+  market_provider?: MarketProvider;
+  weather_api_key?: string;
+  market_api_key?: string;
+  youtube_api_key?: string;
+  weather_location?: string;
+  weather_lat?: string;
+  weather_lon?: string;
 }
 
 interface ServerSettingsResponse {
   success: boolean;
   settings: ServerRuntimeSettings;
 }
+
+type AiSearchApiResponse = AiSearchResponse;
 
 interface ShareUrlResponse {
   success: boolean;
@@ -41,6 +60,21 @@ interface ShareUrlResponse {
 interface StoriesResponse {
   success: boolean;
   stories: LiveStory[];
+}
+
+interface HomeWeatherResponse {
+  success: boolean;
+  snapshot: WeatherSnapshot;
+}
+
+interface HomeMarketResponse {
+  success: boolean;
+  quote: PriceWatchItem;
+}
+
+interface HomeVerseResponse {
+  success: boolean;
+  verse: VerseOfDay;
 }
 
 interface NotificationsResponse {
@@ -293,6 +327,37 @@ class ApiService {
       body: JSON.stringify(payload),
     });
     return response.settings;
+  }
+
+  async runAiSearch(prompt: string): Promise<AiSearchResponse> {
+    const response = await this.request<AiSearchApiResponse>(API_ENDPOINTS.AI_SEARCH, {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
+    });
+    return response;
+  }
+
+  async getHomeWeather(unit: TemperatureUnit = 'f'): Promise<WeatherSnapshot> {
+    const response = await this.request<HomeWeatherResponse>(`${API_ENDPOINTS.HOME_WEATHER}?unit=${unit}`);
+    return response.snapshot;
+  }
+
+  async getHomeMarket(symbol: string, assetType: AssetType): Promise<PriceWatchItem> {
+    const params = `symbol=${encodeURIComponent(symbol)}&assetType=${encodeURIComponent(assetType)}`;
+    const response = await this.request<HomeMarketResponse>(`${API_ENDPOINTS.HOME_MARKET}?${params}`);
+    return response.quote;
+  }
+
+  async getVerseOfDay(): Promise<VerseOfDay> {
+    const response = await this.request<HomeVerseResponse>(API_ENDPOINTS.HOME_VERSE);
+    return response.verse;
+  }
+
+  async sendFeedInteraction(payload: FeedInteractionEvent): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(API_ENDPOINTS.FEED_INTERACTIONS, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 
   // Media endpoints

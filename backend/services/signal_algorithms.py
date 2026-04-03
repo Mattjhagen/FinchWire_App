@@ -38,10 +38,13 @@ def tokenize(value: str) -> List[str]:
 
 
 DEFAULT_INTERACTION_WEIGHTS: Dict[str, float] = {
+    "story_impression": 0.35,
     "story_opened": 1.6,
     "story_clicked": 2.2,
+    "story_dwell": 2.0,
     "story_bookmarked": 3.2,
     "story_liked": 3.8,
+    "source_followed": 3.9,
     "topic_followed": 4.0,
     "creator_followed": 4.5,
     "video_played": 2.4,
@@ -96,6 +99,7 @@ def update_interest_vector(
     creators: Optional[Iterable[str]] = None,
     categories: Optional[Iterable[str]] = None,
     keywords: Optional[Iterable[str]] = None,
+    weight_scale: float = 1.0,
     occurred_at: Optional[datetime] = None,
 ) -> Dict[str, object]:
     base = dict(vector or create_interest_vector())
@@ -106,6 +110,7 @@ def update_interest_vector(
     base.setdefault("keywords", {})
 
     weight = float(DEFAULT_INTERACTION_WEIGHTS.get(interaction_type, 1.0))
+    weight = weight * max(0.05, float(weight_scale))
     _apply_weight(base["topics"], topics or [], weight)
     _apply_weight(base["sources"], sources or [], weight * 0.85)
     _apply_weight(base["creators"], creators or [], weight * 0.95)
@@ -273,4 +278,3 @@ def is_within_quiet_hours(
 def is_story_fresh(published_at_iso: str, freshness_hours: int = 36) -> bool:
     published_at = parse_iso(published_at_iso)
     return (utcnow() - published_at) <= timedelta(hours=freshness_hours)
-

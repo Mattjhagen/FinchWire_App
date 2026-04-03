@@ -21,6 +21,13 @@ from pydantic import BaseModel, Field
 from starlette.middleware.cors import CORSMiddleware
 
 from services.creator_monitor import poll_youtube_creator_events
+from services.ai_search import AiSearchError, run_ai_search
+from services.home_data_providers import (
+    ProviderError,
+    get_market_quote,
+    get_verse_of_day,
+    get_weather_snapshot,
+)
 from services.news_pipeline import compute_story_rankings, ingest_feeds, merge_stories
 from services.notification_engine import (
     DEFAULT_NOTIFICATION_PREFERENCES,
@@ -173,8 +180,19 @@ def _default_settings() -> Dict[str, Any]:
         "tts_provider": "none",
         "ai_api_key": "",
         "tts_api_key": "",
+        "weather_provider": "open_meteo",
+        "market_provider": "coingecko_yahoo",
+        "weather_api_key": "",
+        "market_api_key": "",
+        "youtube_api_key": "",
+        "weather_location": os.environ.get("FINCHWIRE_WEATHER_LOCATION", "Omaha, NE"),
+        "weather_lat": os.environ.get("FINCHWIRE_WEATHER_LAT", "41.2565"),
+        "weather_lon": os.environ.get("FINCHWIRE_WEATHER_LON", "-95.9345"),
         "has_ai_api_key": False,
         "has_tts_api_key": False,
+        "has_weather_api_key": False,
+        "has_market_api_key": False,
+        "has_youtube_api_key": False,
     }
 
 
@@ -192,9 +210,40 @@ def _safe_settings_payload(settings: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "ai_provider": settings.get("ai_provider", "none"),
         "tts_provider": settings.get("tts_provider", "none"),
+        "weather_provider": settings.get("weather_provider", "open_meteo"),
+        "market_provider": settings.get("market_provider", "coingecko_yahoo"),
+        "weather_location": settings.get("weather_location", "Omaha, NE"),
+        "weather_lat": settings.get("weather_lat", "41.2565"),
+        "weather_lon": settings.get("weather_lon", "-95.9345"),
         "has_ai_api_key": bool(settings.get("ai_api_key") or settings.get("has_ai_api_key")),
         "has_tts_api_key": bool(settings.get("tts_api_key") or settings.get("has_tts_api_key")),
+        "has_weather_api_key": bool(settings.get("weather_api_key") or settings.get("has_weather_api_key")),
+        "has_market_api_key": bool(settings.get("market_api_key") or settings.get("has_market_api_key")),
+        "has_youtube_api_key": bool(settings.get("youtube_api_key") or settings.get("has_youtube_api_key")),
     }
+
+
+def _normalized_ai_provider(provider: str) -> str:
+    value = str(provider or "none").strip().lower()
+    # Backward compatibility with previous naming in parts of the UI.
+    if value == "xai":
+        return "grok"
+    return value
+
+
+def _resolve_ai_api_key(provider: str, settings: Dict[str, Any]) -> str:
+    configured = str(settings.get("ai_api_key") or "").strip()
+    if configured:
+        return configured
+
+    env_lookup = {
+        "gemini": os.environ.get("GEMINI_API_KEY", ""),
+        "openai": os.environ.get("OPENAI_API_KEY", ""),
+        "anthropic": os.environ.get("ANTHROPIC_API_KEY", ""),
+        "groq": os.environ.get("GROQ_API_KEY", ""),
+        "grok": os.environ.get("XAI_API_KEY", "") or os.environ.get("GROK_API_KEY", ""),
+    }
+    return str(env_lookup.get(provider, "") or "").strip()
 
 
 def _interest_profile_for_user(user_id: str) -> Dict[str, Any]:
@@ -211,6 +260,41 @@ def _interest_profile_for_user(user_id: str) -> Dict[str, Any]:
 def _set_interest_profile_for_user(user_id: str, profile: Dict[str, Any]) -> None:
     profiles = _collection("interest_profiles")
     profiles[user_id] = profile
+
+
+def _map_feed_event_to_interaction(event_type: str, raw_value: Optional[float]) -> tuple[str, float]:
+    normalized = str(event_type or "").strip().lower()
+    numeric_value = 0.0
+    if raw_value is not None:
+        try:
+            numeric_value = float(raw_value)
+        except Exception:
+            numeric_value = 0.0
+
+    if normalized == "impression":
+        return "story_impression", 1.0
+    if normalized == "open":
+        return "story_opened", 1.0
+    if normalized == "click":
+        return "story_clicked", 1.0
+    if normalized == "dwell":
+        # Value is expected in seconds. Do not overweight a single long session.
+        # 0-20s => 0.35x, ~60s => 1.0x, >=180s => 2.2x
+        if numeric_value <= 0:
+            return "story_dwell", 0.35
+        scale = max(0.35, min(2.2, numeric_value / 60.0))
+        return "story_dwell", scale
+    if normalized == "follow_topic":
+        return "topic_followed", 1.0
+    if normalized == "follow_source":
+        return "source_followed", 1.0
+    if normalized == "follow_creator":
+        return "creator_followed", 1.0
+    if normalized == "save":
+        return "story_bookmarked", 1.0
+    if normalized in {"hide", "not_interested"}:
+        return "story_dismissed", 1.0
+    return "story_opened", 0.5
 
 
 def _notification_preferences_for_user(user_id: str) -> Dict[str, Any]:
@@ -283,7 +367,11 @@ def poll_creator_events_cycle() -> Dict[str, int]:
             if isinstance(watches, list):
                 all_watches.extend(watches)
 
-    youtube_api_key = os.environ.get("YOUTUBE_API_KEY", "").strip()
+    settings = _settings_state()
+    youtube_api_key = (
+        str(settings.get("youtube_api_key") or "").strip()
+        or os.environ.get("YOUTUBE_API_KEY", "").strip()
+    )
     generated = poll_youtube_creator_events(
         watches=all_watches,
         existing_events=creator_events,
@@ -525,6 +613,18 @@ class UpdateServerSettingsRequest(BaseModel):
     tts_provider: Optional[str] = None
     ai_api_key: Optional[str] = None
     tts_api_key: Optional[str] = None
+    weather_provider: Optional[str] = None
+    market_provider: Optional[str] = None
+    weather_api_key: Optional[str] = None
+    market_api_key: Optional[str] = None
+    youtube_api_key: Optional[str] = None
+    weather_location: Optional[str] = None
+    weather_lat: Optional[str] = None
+    weather_lon: Optional[str] = None
+
+
+class AiSearchRequest(BaseModel):
+    prompt: str
 
 
 class StoryFeedbackRequest(BaseModel):
@@ -536,6 +636,20 @@ class StoryFeedbackRequest(BaseModel):
     categories: List[str] = Field(default_factory=list)
     creators: List[str] = Field(default_factory=list)
     keywords: List[str] = Field(default_factory=list)
+
+
+class FeedInteractionRequest(BaseModel):
+    item_id: str
+    item_type: str = "article"
+    event_type: str
+    title: Optional[str] = None
+    source: Optional[str] = None
+    topics: List[str] = Field(default_factory=list)
+    categories: List[str] = Field(default_factory=list)
+    creators: List[str] = Field(default_factory=list)
+    keywords: List[str] = Field(default_factory=list)
+    value: Optional[float] = None
+    occurred_at: Optional[str] = None
 
 
 class PushSubscriptionRequest(BaseModel):
@@ -650,9 +764,116 @@ async def patch_settings(payload: UpdateServerSettingsRequest, user: str = Depen
     if payload.tts_api_key is not None:
         settings["tts_api_key"] = payload.tts_api_key.strip()
         settings["has_tts_api_key"] = bool(settings["tts_api_key"])
+    if payload.weather_provider is not None:
+        settings["weather_provider"] = payload.weather_provider
+    if payload.market_provider is not None:
+        settings["market_provider"] = payload.market_provider
+    if payload.weather_api_key is not None:
+        settings["weather_api_key"] = payload.weather_api_key.strip()
+        settings["has_weather_api_key"] = bool(settings["weather_api_key"])
+    if payload.market_api_key is not None:
+        settings["market_api_key"] = payload.market_api_key.strip()
+        settings["has_market_api_key"] = bool(settings["market_api_key"])
+    if payload.youtube_api_key is not None:
+        settings["youtube_api_key"] = payload.youtube_api_key.strip()
+        settings["has_youtube_api_key"] = bool(settings["youtube_api_key"])
+    if payload.weather_location is not None:
+        settings["weather_location"] = payload.weather_location.strip()
+    if payload.weather_lat is not None:
+        settings["weather_lat"] = payload.weather_lat.strip()
+    if payload.weather_lon is not None:
+        settings["weather_lon"] = payload.weather_lon.strip()
     settings["updatedAt"] = isoformat_utc(utcnow())
     _save_state()
     return {"success": True, "settings": _safe_settings_payload(settings)}
+
+
+@api_router.post("/ai/search")
+async def ai_search(payload: AiSearchRequest, user: str = Depends(get_current_user)):
+    settings = _settings_state()
+    provider = _normalized_ai_provider(settings.get("ai_provider", "none"))
+    if provider == "none":
+        raise HTTPException(
+            status_code=400,
+            detail="AI provider is disabled. Set provider in Settings first.",
+        )
+
+    api_key = _resolve_ai_api_key(provider, settings)
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{provider.upper()} API key is missing. Add it in Settings → AI + Voice.",
+        )
+
+    try:
+        result = run_ai_search(
+            prompt=payload.prompt,
+            provider=provider,
+            api_key=api_key,
+        )
+    except AiSearchError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return {
+        "success": True,
+        "provider": provider,
+        **result.as_dict(),
+    }
+
+
+@api_router.get("/home/weather")
+async def get_home_weather(unit: str = Query("f"), user: str = Depends(get_current_user)):
+    normalized_unit = str(unit or "f").strip().lower()
+    if normalized_unit not in {"f", "c"}:
+        raise HTTPException(status_code=400, detail="unit must be f or c")
+    settings = _settings_state()
+    try:
+        snapshot = get_weather_snapshot(
+            unit=normalized_unit,
+            config={
+                "weather_provider": settings.get("weather_provider"),
+                "weather_api_key": settings.get("weather_api_key"),
+                "weather_location": settings.get("weather_location"),
+                "weather_lat": settings.get("weather_lat"),
+                "weather_lon": settings.get("weather_lon"),
+            },
+        )
+    except ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"success": True, "snapshot": snapshot.as_dict()}
+
+
+@api_router.get("/home/market")
+async def get_home_market(
+    symbol: str = Query(..., min_length=1),
+    assetType: str = Query("crypto"),
+    user: str = Depends(get_current_user),
+):
+    normalized_asset_type = str(assetType or "").strip().lower()
+    if normalized_asset_type not in {"stock", "crypto"}:
+        raise HTTPException(status_code=400, detail="assetType must be stock or crypto")
+    settings = _settings_state()
+    try:
+        quote = get_market_quote(
+            symbol=symbol,
+            asset_type=normalized_asset_type,
+            config={
+                "market_provider": settings.get("market_provider"),
+                "market_api_key": settings.get("market_api_key"),
+            },
+        )
+    except ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"success": True, "quote": quote.as_dict()}
+
+
+@api_router.get("/home/verse")
+async def get_home_verse(user: str = Depends(get_current_user)):
+    try:
+        verse = get_verse_of_day()
+    except ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"success": True, "verse": verse.as_dict()}
 
 
 @api_router.get("/downloads", response_model=List[MediaJob])
@@ -796,6 +1017,51 @@ async def post_interest_feedback(payload: StoryFeedbackRequest, user: str = Depe
         }
     )
     interactions[:] = interactions[-10000:]
+    _save_state()
+    return {"success": True, "interestVector": profile}
+
+
+@api_router.post("/interactions/feed")
+async def post_feed_interaction(payload: FeedInteractionRequest, user: str = Depends(get_current_user)):
+    mapped_type, weight_scale = _map_feed_event_to_interaction(payload.event_type, payload.value)
+    profile = _interest_profile_for_user(user)
+    keyword_fallback = payload.keywords or tokenize(
+        f"{payload.title or ''} {payload.source or ''} {' '.join(payload.topics or [])}"
+    )
+    profile = update_interest_vector(
+        profile,
+        mapped_type,
+        topics=payload.topics,
+        sources=[payload.source] if payload.source else [],
+        creators=payload.creators,
+        categories=payload.categories,
+        keywords=keyword_fallback,
+        weight_scale=weight_scale,
+    )
+    _set_interest_profile_for_user(user, profile)
+
+    interactions = _collection("user_story_interactions")
+    interactions.append(
+        {
+            "id": str(uuid.uuid4()),
+            "userId": user,
+            "itemId": payload.item_id,
+            "itemType": payload.item_type,
+            "eventType": payload.event_type,
+            "mappedInteractionType": mapped_type,
+            "value": payload.value,
+            "weightScale": weight_scale,
+            "title": payload.title,
+            "source": payload.source,
+            "topics": payload.topics,
+            "categories": payload.categories,
+            "creators": payload.creators,
+            "keywords": keyword_fallback,
+            "occurredAt": payload.occurred_at or isoformat_utc(utcnow()),
+            "createdAt": isoformat_utc(utcnow()),
+        }
+    )
+    interactions[:] = interactions[-12000:]
     _save_state()
     return {"success": True, "interestVector": profile}
 

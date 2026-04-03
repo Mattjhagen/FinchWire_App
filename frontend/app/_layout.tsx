@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
-import { AppState, Linking } from 'react-native';
+import { Alert, AppState, Linking } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
@@ -12,6 +12,7 @@ import { useSettingsStore } from '../src/store/settingsStore';
 import { useAppLockStore } from '../src/store/appLockStore';
 import { appLockService } from '../src/services/appLockService';
 import { apiService } from '../src/services/api';
+import { pushNotificationsService } from '../src/services/pushNotifications';
 import { storageService } from '../src/services/storage';
 import { shouldRelockFromBackground } from '../src/features/app-lock/policy';
 import { AppLockGate } from '../src/components/AppLockGate';
@@ -19,6 +20,7 @@ import { colors } from '../src/utils/theme';
 
 const queryClient = new QueryClient();
 const PENDING_INCOMING_URL_KEY = '@finchwire_pending_incoming_url';
+const PUSH_ONBOARDING_PROMPTED_KEY = '@finchwire_push_onboarding_prompted_v1';
 const FINCHWIRE_MEDIA_HOSTS = new Set(['media.p3lending.space', 'yt.finchwire.site']);
 const HTTP_URL_REGEX = /https?:\/\/[^\s]+/i;
 
@@ -293,6 +295,47 @@ function RootLayoutNav() {
       cancelled = true;
     };
   }, [isAuthenticated, routeIncomingUrl, setupComplete]);
+
+  // Ask for push permission once on first authenticated launch.
+  useEffect(() => {
+    if (!setupComplete || !isAuthenticated) return;
+
+    let cancelled = false;
+    (async () => {
+      const prompted = await AsyncStorage.getItem(PUSH_ONBOARDING_PROMPTED_KEY);
+      if (cancelled || prompted) return;
+
+      await AsyncStorage.setItem(PUSH_ONBOARDING_PROMPTED_KEY, '1');
+      if (cancelled) return;
+
+      Alert.alert(
+        'Enable FinchWire notifications?',
+        'Get alerts for trending stories, favorite creators going live, and major updates.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          {
+            text: 'Enable',
+            onPress: () => {
+              void (async () => {
+                try {
+                  const token = await pushNotificationsService.registerDeviceForPush();
+                  if (!token) return;
+                  await apiService.subscribePushToken(token);
+                } catch (error) {
+                  if (cancelled) return;
+                  Alert.alert('Push setup failed', pushNotificationsService.formatRegistrationError(error));
+                }
+              })();
+            },
+          },
+        ]
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, setupComplete]);
 
   // Handle navigation based on auth state
   useEffect(() => {
