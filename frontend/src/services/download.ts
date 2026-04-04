@@ -1,16 +1,22 @@
 // Download Service for local file management
 import * as FileSystem from 'expo-file-system/legacy';
+import { Platform } from 'react-native';
 
 class DownloadService {
   private downloadsDir: string;
 
   constructor() {
+    if (Platform.OS === 'web') {
+      this.downloadsDir = '';
+      return;
+    }
     // Use app's document directory for downloads
     this.downloadsDir = `${FileSystem.documentDirectory}downloads/`;
     this.ensureDownloadDirectory();
   }
 
   private async ensureDownloadDirectory() {
+    if (Platform.OS === 'web') return;
     const dirInfo = await FileSystem.getInfoAsync(this.downloadsDir);
     if (!dirInfo.exists) {
       await FileSystem.makeDirectoryAsync(this.downloadsDir, { intermediates: true });
