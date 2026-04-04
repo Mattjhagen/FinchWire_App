@@ -88,6 +88,7 @@ export default function PlayerScreen() {
   const [autoplayEnabled, setAutoplayEnabled] = useState(true);
   const [shuffleEnabled, setShuffleEnabled] = useState(false);
   const [playlist, setPlaylist] = useState<MediaJob[]>([]);
+  const [showSubtitles, setShowSubtitles] = useState(false);
 
   const hasAppliedResumeRef = useRef(false);
   const endedHandledRef = useRef(false);
@@ -114,19 +115,32 @@ export default function PlayerScreen() {
       : null;
 
   const videoSource = useMemo(() => {
-    if (!playbackUrl) {
-      return null;
-    }
-    if (mediaHeaders) {
-      return {
-        uri: playbackUrl,
-        headers: mediaHeaders,
-      };
-    }
-    return {
+    const source: any = {
       uri: playbackUrl,
     };
-  }, [mediaHeaders, playbackUrl]);
+    if (mediaHeaders) {
+      source.headers = mediaHeaders;
+    }
+    // Check for sidecar subtitles (.vtt) if available on the server
+    if (!isSharedExternal && mediaPath) {
+      source.subtitles = [{
+        uri: apiService.getAuthenticatedMediaUrl(`${mediaPath}.vtt`),
+        label: 'English',
+        language: 'en',
+      }];
+    }
+    return source;
+  }, [isSharedExternal, mediaHeaders, mediaPath, playbackUrl]);
+
+  const player = useVideoPlayer(videoSource, (createdPlayer) => {
+    createdPlayer.timeUpdateEventInterval = 0.25;
+    createdPlayer.staysActiveInBackground = true;
+  });
+
+  // Keep player subtitle visibility state in sync
+  useEffect(() => {
+    (player as any).showSubtitles = showSubtitles;
+  }, [player, showSubtitles]);
 
   const getSavedPosition = useCallback(async (mediaId: string): Promise<number> => {
     try {
@@ -181,11 +195,6 @@ export default function PlayerScreen() {
       // Best effort only.
     }
   }, []);
-
-  const player = useVideoPlayer(videoSource, (createdPlayer) => {
-    createdPlayer.timeUpdateEventInterval = 0.25;
-    createdPlayer.staysActiveInBackground = true;
-  });
 
   const loadMedia = useCallback(async () => {
     if (isSharedExternal && sharedPlaybackUrl) {
@@ -405,6 +414,12 @@ export default function PlayerScreen() {
     position,
     router,
   ]);
+
+  const toggleFullScreen = () => {
+    if (videoViewRef.current) {
+      videoViewRef.current.enterFullscreen();
+    }
+  };
 
   const togglePlayPause = async () => {
     if (isPlaying) {
@@ -709,6 +724,17 @@ export default function PlayerScreen() {
             >
               <Ionicons name="play-forward" size={24} color={colors.text} />
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.miniActionBtn, showSubtitles && styles.miniActionBtnActive]}
+              onPress={() => setShowSubtitles(!showSubtitles)}
+            >
+              <Ionicons name="settings" size={20} color={showSubtitles ? colors.buttonText : colors.text} />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.miniActionBtn} onPress={toggleFullScreen}>
+              <Ionicons name="expand" size={20} color={colors.text} />
+            </TouchableOpacity>
           </View>
 
           <Slider
@@ -968,6 +994,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  miniActionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  miniActionBtnActive: {
+    backgroundColor: colors.primary,
   },
   scrubber: {
     width: '100%',
