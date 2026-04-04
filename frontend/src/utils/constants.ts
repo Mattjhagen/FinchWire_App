@@ -1,6 +1,6 @@
 // FinchWire Constants
 
-export const DEFAULT_BACKEND_URL = 'http://192.168.1.107:8000';
+export const DEFAULT_BACKEND_URL = 'http://192.168.1.32:8000';
 export const DEFAULT_RETENTION_DAYS = 30;
 
 export const STORAGE_KEYS = {
