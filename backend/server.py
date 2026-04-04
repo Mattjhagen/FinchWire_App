@@ -1469,15 +1469,15 @@ FRONTEND_DIST = ROOT_DIR.parent / "frontend" / "dist"
 WEBSITE_DIR = ROOT_DIR.parent / "website"
 
 # 1. Mount Terms & Privacy from the marketing folder first
-if WEBSITE_DIR.exists():
-    if (WEBSITE_DIR / "privacy").exists():
+if WEBSITE_DIR.is_dir():
+    if (WEBSITE_DIR / "privacy").is_dir():
         app.mount("/privacy", StaticFiles(directory=str(WEBSITE_DIR / "privacy"), html=True), name="privacy")
-    if (WEBSITE_DIR / "terms").exists():
+    if (WEBSITE_DIR / "terms").is_dir():
         app.mount("/terms", StaticFiles(directory=str(WEBSITE_DIR / "terms"), html=True), name="terms")
 
 # 2. Mount the Main Media Player Dashboard as the Root
-if FRONTEND_DIST.exists():
+if FRONTEND_DIST.is_dir():
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="dashboard")
-elif WEBSITE_DIR.exists():
+elif WEBSITE_DIR.is_dir():
     # Fallback to Landing Page if Player isn't built/pushed yet
     app.mount("/", StaticFiles(directory=str(WEBSITE_DIR), html=True), name="website")
