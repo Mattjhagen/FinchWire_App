@@ -812,6 +812,7 @@ async def ai_search(payload: AiSearchRequest, user: str = Depends(get_current_us
             api_key=api_key,
         )
     except AiSearchError as exc:
+        logger.error(f"AI search failed: {exc}")
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return {
