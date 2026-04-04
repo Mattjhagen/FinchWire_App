@@ -1416,6 +1416,12 @@ async def serve_media(
     actual_token = token or x_token or ""
     if not verify_token(actual_token):
         raise HTTPException(status_code=401, detail="Unauthorized - valid token required")
+
+    # 🎥 Handle legacy 'watch' paths to avoid 404s
+    if file_path == "watch":
+        # FinchWire HLS player and live channels use specific routes under /api/live
+        raise HTTPException(status_code=400, detail="Use the /api/live endpoint for HLS playback")
+
     full_path = MEDIA_DIR / file_path
     
     # 🕵️ Smart extension lookup (checks for .mp4, .mp3, etc. automatically)
