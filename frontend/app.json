@@ -103,16 +103,13 @@
     },
     "extra": {
       "router": {},
-      "eas": {
-        "projectId": "bd5bc628-9fdd-4f3c-96d0-4b08e2daec19"
-      }
+      "eas": {}
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
       "url": "https://u.expo.dev/6a981733-6ad4-4906-bb8d-06680457da36"
-    },
-    "owner": "p3-securities"
+    }
   }
 }
