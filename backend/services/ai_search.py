@@ -154,8 +154,11 @@ def _run_gemini(prompt: str, api_key: str) -> AiSearchResult:
         f"?key={api_key}"
     )
     payload = {
-        "contents": [{"parts": [{"text": str(prompt or "").strip()}]}],
-        "systemInstruction": {"parts": [{"text": _PROMPT_TEMPLATE}]},
+        "contents": [
+            {"role": "user", "parts": [{"text": _PROMPT_TEMPLATE}]},
+            {"role": "model", "parts": [{"text": "Understood. I will act as the FinchWire AI assistant."}]},
+            {"role": "user", "parts": [{"text": str(prompt or "").strip()}]}
+        ],
         "generationConfig": {"temperature": 0.25},
     }
     data = _request_json(
