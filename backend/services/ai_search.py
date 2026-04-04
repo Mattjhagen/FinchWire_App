@@ -148,30 +148,36 @@ def _run_openai_compatible(
 
 
 def _run_gemini(prompt: str, api_key: str) -> AiSearchResult:
-    model = os.environ.get("FINCHWIRE_GEMINI_MODEL", "gemini-pro").strip() or "gemini-pro"
-    endpoint = (
-        f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
-        f"?key={api_key}"
-    )
-    payload = {
-        "contents": [
-            {"role": "user", "parts": [{"text": _PROMPT_TEMPLATE}]},
-            {"role": "model", "parts": [{"text": "Understood. I will act as the FinchWire AI assistant."}]},
-            {"role": "user", "parts": [{"text": str(prompt or "").strip()}]}
-        ],
-        "generationConfig": {"temperature": 0.25},
-    }
-    data = _request_json(
-        endpoint,
-        headers={"Content-Type": "application/json"},
-        payload=payload,
-    )
-    candidates = data.get("candidates")
-    if isinstance(candidates, list) and candidates:
-        parts = candidates[0].get("content", {}).get("parts", [])
-        text_chunks = [str(part.get("text") or "") for part in parts if isinstance(part, dict)]
-        return _normalize_result(prompt, "\n".join(text_chunks).strip())
-    raise AiSearchError("Gemini response missing candidates")
+    configured_model = os.environ.get("FINCHWIRE_GEMINI_MODEL", "").strip()
+    models_to_try = [configured_model] if configured_model else ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro", "gemini-2.0-flash-exp"]
+    
+    last_exc = None
+    for model in models_to_try:
+        if not model: continue
+        endpoint = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={api_key}"
+        payload = {
+            "contents": [
+                {"role": "user", "parts": [{"text": _PROMPT_TEMPLATE}]},
+                {"role": "model", "parts": [{"text": "Understood. I will act as the FinchWire AI assistant."}]},
+                {"role": "user", "parts": [{"text": str(prompt or "").strip()}]}
+            ],
+            "generationConfig": {"temperature": 0.25},
+        }
+        try:
+            data = _request_json(endpoint, headers={"Content-Type": "application/json"}, payload=payload)
+            candidates = data.get("candidates")
+            if isinstance(candidates, list) and candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                text_chunks = [str(part.get("text") or "") for part in parts if isinstance(part, dict)]
+                return _normalize_result(prompt, "\n".join(text_chunks).strip())
+            raise AiSearchError(f"Gemini response for '{model}' missing candidates")
+        except AiSearchError as exc:
+            last_exc = exc
+            if "HTTP 404" in str(exc) or "not found" in str(exc).lower():
+                continue # Try next model
+            raise exc
+            
+    raise last_exc or AiSearchError("No Gemini models responded successfully")
 
 
 def _run_anthropic(prompt: str, api_key: str) -> AiSearchResult:
