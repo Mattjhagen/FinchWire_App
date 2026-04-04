@@ -15,6 +15,7 @@ import uuid
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -1454,3 +1455,7 @@ async def shutdown_event():
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
+# Mount the static website files after all other routes
+WEBSITE_DIR = ROOT_DIR.parent / "website"
+if WEBSITE_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(WEBSITE_DIR), html=True), name="website")
