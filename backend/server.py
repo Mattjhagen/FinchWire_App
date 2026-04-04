@@ -57,7 +57,7 @@ logging.basicConfig(level=logging.INFO)
 STATE_FILE = Path(os.environ.get("FINCHWIRE_STATE_FILE", ROOT_DIR / "finchwire_state.json"))
 store = JsonStateStore(STATE_FILE)
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "super-secret-finchwire-key-change-me")
+SECRET_KEY = os.environ.get("FINCHWIRE_SECRET_KEY", secrets.token_urlsafe(32))
 ALGORITHM = "HS256"
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer(auto_error=False)
