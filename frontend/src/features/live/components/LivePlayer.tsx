@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -48,6 +48,9 @@ export function LivePlayer({ channel }: LivePlayerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
 
+  const [loadingTimeoutId, setLoadingTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  const loadingWatchdogRef = useRef<NodeJS.Timeout | null>(null);
+
   // Auto-hide controls overlay after 3 s in fullscreen
   useEffect(() => {
     if (!isFullscreen || !controlsVisible) return;
@@ -67,29 +70,44 @@ export function LivePlayer({ channel }: LivePlayerProps) {
     return getLiveEmbedResult(channel);
   }, [channel]);
 
+  // Reset state when channel changes
   useEffect(() => {
     setIsLoading(true);
     setRuntimeError(null);
     setMountKey((k) => k + 1);
+    
+    // Start loading watchdog
+    if (loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current);
+    loadingWatchdogRef.current = setTimeout(() => {
+      if (isLoading) {
+        setRuntimeError('The stream reached a timeout. It may be restricted or currently offline.');
+        setIsLoading(false);
+      }
+    }, 15000);
+
+    return () => {
+      if (loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current);
+    };
   }, [channel?.id]);
 
   const handleMessage = useCallback((event: WebViewMessageEvent) => {
     try {
       const msg = JSON.parse(event.nativeEvent.data);
       if (msg?.type === 'yt_error') {
+        if (loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current);
         const code = Number(msg.code);
-        if (code === 150 || code === 101) {
-          setRuntimeError('This stream has embedding disabled. Tap "Watch on YouTube" to view it.');
+        if (code === 150 || code === 101 || code === 153) {
+          setRuntimeError('Embedding blocked: The owner restricted playback here. Tap "Watch on YouTube".');
         } else if (code === 5) {
-          setRuntimeError('HTML5 player error. Try watching directly on YouTube.');
+          setRuntimeError('HTML5 error: Try watching directly on YouTube.');
+        } else if (code === 2 || code === 100) {
+          setRuntimeError('Stream not found: The live address may have changed.');
         } else {
           setRuntimeError(`Playback error (code ${code}). Try watching on YouTube.`);
         }
         setIsLoading(false);
       }
-    } catch {
-      // Not a message we handle.
-    }
+    } catch { }
   }, []);
 
   const handleReload = useCallback(() => {
@@ -116,7 +134,7 @@ export function LivePlayer({ channel }: LivePlayerProps) {
       <View style={styles.placeholder}>
         <Ionicons name="tv-outline" size={30} color={colors.textSecondary} />
         <Text style={styles.placeholderTitle}>No channel selected</Text>
-        <Text style={styles.placeholderText}>Select a channel from the guide to start playback.</Text>
+        <Text style={styles.placeholderText}>Select a channel from the guide to start.</Text>
       </View>
     );
   }
@@ -150,8 +168,6 @@ export function LivePlayer({ channel }: LivePlayerProps) {
   }
 
   // ── Player dimensions ──────────────────────────────────────────────────────
-  // In fullscreen or landscape: fill the whole screen.
-  // In portrait inline: fixed 16:9 box.
   const playerWidth = isFullscreen || isLandscape ? width : width - spacing.md * 2;
   const playerHeight = isFullscreen || isLandscape ? height : Math.round(playerWidth * (9 / 16));
 
@@ -171,48 +187,49 @@ export function LivePlayer({ channel }: LivePlayerProps) {
 
   return (
     <View style={shellStyle}>
-      {isFullscreen || isLandscape ? (
-        <StatusBar hidden />
-      ) : (
-        <StatusBar hidden={false} />
-      )}
+      {isFullscreen || isLandscape ? <StatusBar hidden /> : <StatusBar hidden={false} />}
 
       {isLoading ? (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator color={colors.primary} size="small" />
-          <Text style={styles.loadingText}>Loading stream...</Text>
+          <Text style={styles.loadingText}>Loading live content...</Text>
         </View>
       ) : null}
 
       <WebView
-        key={`${channel.id}-${mountKey}`}
+        key={`vid-${channel.id}-${mountKey}`}
         source={{ uri: embed.url }}
         style={{ width: playerWidth, height: playerHeight, backgroundColor: '#000' }}
         allowsFullscreenVideo
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
-        setSupportMultipleWindows={false}
-        onRenderProcessGone={() => {
-          setRuntimeError(null);
-          setIsLoading(true);
-          setMountKey((k) => k + 1);
+        onLoadStart={() => { setIsLoading(true); setRuntimeError(null); }}
+        onLoadEnd={() => { setIsLoading(false); if(loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current); }}
+        onError={() => { 
+          setRuntimeError('Could not connect to the stream. Network error or restricted.'); 
+          setIsLoading(false); 
+          if(loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current);
+        }}
+        onHttpError={(e) => {
+          const code = e.nativeEvent.statusCode;
+          setRuntimeError(`Stream returned error ${code}. Try watching on YouTube.`);
+          setIsLoading(false);
+          if(loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current);
         }}
         userAgent={WEBVIEW_USER_AGENT}
         javaScriptEnabled
         injectedJavaScript={YT_ERROR_LISTENER_JS}
         onMessage={handleMessage}
-        onLoadStart={() => { setIsLoading(true); setRuntimeError(null); }}
-        onLoadEnd={() => setIsLoading(false)}
-        onError={() => { setRuntimeError('This stream could not be loaded right now.'); setIsLoading(false); }}
-        onHttpError={(e) => {
-          const code = e.nativeEvent.statusCode;
-          setRuntimeError(
-            code === 403 || code === 451
-              ? 'Stream is geo-restricted or embedding is blocked. Tap "Watch on YouTube".'
-              : `Stream returned HTTP ${code}. Try watching on YouTube.`
-          );
-          setIsLoading(false);
-        }}
+        renderError={() => (
+          <View style={styles.loadingOverlay}>
+            <Text style={styles.loadingText}>Stream Connection Error</Text>
+          </View>
+        )}
+        renderLoading={() => (
+          <View style={styles.loadingOverlay}>
+             <ActivityIndicator color={colors.primary} size="small" />
+          </View>
+        )}
       />
 
       {/* Tappable overlay to show/hide controls in fullscreen */}

@@ -62,6 +62,7 @@ DEFAULT_INTERACTION_WEIGHTS: Dict[str, float] = {
     "source_followed": 3.9,
     "topic_followed": 4.0,
     "creator_followed": 4.5,
+    "ai_interaction": 5.0,
     "video_played": 2.4,
     "video_downloaded": 2.8,
     "notification_opened": 2.0,

@@ -205,7 +205,8 @@ export interface StoryFeedbackPayload {
     | 'story_dismissed'
     | 'topic_muted'
     | 'creator_muted'
-    | 'notification_ignored';
+    | 'notification_ignored'
+    | 'ai_interaction';
   story_id?: string;
   title?: string;
   source?: string;
@@ -213,6 +214,9 @@ export interface StoryFeedbackPayload {
   categories?: string[];
   creators?: string[];
   keywords?: string[];
+  ai_query?: string;
+  ai_answer?: string;
+  occurred_at?: string;
 }
 
 export interface FeedInteractionEvent {

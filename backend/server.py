@@ -40,6 +40,7 @@ from services.signal_algorithms import (
     create_interest_vector,
     decay_interest_vector,
     isoformat_utc,
+    parse_iso,
     tokenize,
     update_interest_vector,
     utcnow,
@@ -650,6 +651,10 @@ class StoryFeedbackRequest(BaseModel):
     categories: List[str] = Field(default_factory=list)
     creators: List[str] = Field(default_factory=list)
     keywords: List[str] = Field(default_factory=list)
+    ai_query: Optional[str] = None
+    ai_answer: Optional[str] = None
+    value: Optional[float] = None
+    occurred_at: Optional[str] = None
 
 
 class FeedInteractionRequest(BaseModel):
@@ -1079,37 +1084,123 @@ async def get_my_interests(user: str = Depends(get_current_user)):
 
 @api_router.post("/interests/feedback")
 async def post_interest_feedback(payload: StoryFeedbackRequest, user: str = Depends(get_current_user)):
-    profile = _interest_profile_for_user(user)
-    profile = update_interest_vector(
-        profile,
+    vector = _interest_profile_for_user(user)
+    
+    # Extract AI-specific intent tokens if available
+    keywords = list(payload.keywords or [])
+    if payload.ai_query:
+        # Boost keywords from user's AI questions
+        keywords.extend(tokenize(payload.ai_query))
+    if payload.ai_answer:
+        # Include keywords from AI's generated knowledge
+        keywords.extend(tokenize(payload.ai_answer))
+
+    updated = update_interest_vector(
+        vector,
         payload.interaction_type,
         topics=payload.topics,
         sources=[payload.source] if payload.source else [],
         creators=payload.creators,
         categories=payload.categories,
-        keywords=payload.keywords or tokenize(f"{payload.title or ''} {payload.source or ''}"),
+        keywords=keywords,
+        weight_scale=1.0 if payload.interaction_type != "ai_interaction" else 1.5, # AI is highest signal
+        occurred_at=parse_iso(payload.occurred_at) if payload.occurred_at else None,
     )
-    _set_interest_profile_for_user(user, profile)
-
-    interactions = _collection("user_story_interactions")
-    interactions.append(
-        {
-            "id": str(uuid.uuid4()),
-            "userId": user,
-            "interactionType": payload.interaction_type,
-            "storyId": payload.story_id,
-            "title": payload.title,
-            "source": payload.source,
-            "topics": payload.topics,
-            "categories": payload.categories,
-            "creators": payload.creators,
-            "keywords": payload.keywords,
-            "createdAt": isoformat_utc(utcnow()),
-        }
-    )
-    interactions[:] = interactions[-10000:]
+    _set_interest_profile_for_user(user, updated)
     _save_state()
-    return {"success": True, "interestVector": profile}
+
+    # Log interaction
+    interactions = _collection("user_story_interactions")
+    interactions.append({
+        "id": str(uuid.uuid4()),
+        "userId": user,
+        "interactionType": payload.interaction_type,
+        "storyId": payload.story_id,
+        "aiQuery": payload.ai_query,
+        "createdAt": isoformat_utc(utcnow()),
+    })
+    
+    # Trigger background auto-sync/discovery based on new interest vector
+    if payload.interaction_type == "ai_interaction":
+        _trigger_auto_media_sync(user, updated)
+
+    return {"success": True}
+
+
+def _trigger_auto_media_sync(user: str, vector: Dict[str, Any]) -> None:
+    """
+    Search for highly relevant recent stories or videos and trigger auto-downloads.
+    """
+    try:
+        from services.signal_algorithms import keyword_overlap_score
+        
+        # 1. Check Creator Events (YouTube)
+        events = _collection("creator_events") or []
+        downloads = _collection("downloads") or []
+        existing_urls = {str(d.get("url", "")) for d in downloads}
+        
+        matches = []
+        for ev in events:
+            url = str(ev.get("url", ""))
+            if not url or url in existing_urls:
+                continue
+            
+            # Score match against user's interest vector
+            text = f"{ev.get('title', '')} {' '.join(ev.get('topics', []))}"
+            score = keyword_overlap_score(text, vector)
+            if score >= 10.0: # Very strong match
+                matches.append((score, url, str(ev.get("title", "")), "video"))
+        
+        # 2. Check Live Stories (Top Trending / Relevant)
+        stories = _collection("stories") or []
+        for story in stories:
+            url = str(story.get("url", ""))
+            if not url or url in existing_urls:
+                continue
+            
+            text = f"{story.get('title', '')} {story.get('summary', '')}"
+            score = keyword_overlap_score(text, vector)
+            if score >= 14.0: # Extremely high interest
+                 matches.append((score, url, str(story.get("title", "")), "article"))
+        
+        # Sort and take top 2
+        matches.sort(key=lambda x: x[0], reverse=True)
+        top_picks = matches[:2]
+        
+        if not top_picks:
+            return
+
+        for score, url, title, ktype in top_picks:
+            _init_download_from_internal(url, title, ktype == "video")
+            logger.info(f"Auto-sync triggered for {user}: Found {ktype} '{title[:40]}...' (score {score:.1f})")
+            
+    except Exception as exc:
+        logger.error(f"Auto-sync logic failure: {exc}")
+
+
+def _init_download_from_internal(url: str, title: str, is_video: bool) -> MediaJob:
+    """Internal helper to bypass uvicorn dependency injection for background tasks."""
+    raw_name = title.strip() or url.split("/")[-1] or "download"
+    safe_name = raw_name.replace(" ", "_").strip() or f"sync_{uuid.uuid4().hex[:8]}"
+    
+    try:
+        source_domain = urlparse(url).netloc.replace("www.", "")
+    except Exception:
+        source_domain = ""
+
+    job = MediaJob(
+        url=url.strip(),
+        original_url=url.strip(),
+        filename=raw_name,
+        safe_filename=safe_name,
+        relative_path=safe_name,
+        source_domain=source_domain,
+        status="queued",
+        is_audio=not is_video,
+    )
+    _collection("downloads").append(job.model_dump())
+    _save_state()
+    return job
 
 
 @api_router.post("/interactions/feed")

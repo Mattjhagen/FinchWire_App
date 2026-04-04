@@ -108,6 +108,23 @@ export default function ArticleScreen() {
   const categories = useMemo(() => decodeJsonListParam(params.categories), [params.categories]);
 
   useEffect(() => {
+    // Enable background audio mode globally for this screen
+    Audio.setAudioModeAsync({
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: true,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    }).catch(() => undefined);
+
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => undefined);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!url) return;
     const startedAtMs = startedAtRef.current;
 
@@ -146,9 +163,6 @@ export default function ArticleScreen() {
           occurred_at: new Date().toISOString(),
         }).catch(() => undefined);
       }
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => undefined);
-      }
     };
   }, [categories, creators, keywords, source, storyId, title, topics, url]);
 
@@ -176,6 +190,9 @@ export default function ArticleScreen() {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
       });
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -294,6 +311,21 @@ export default function ArticleScreen() {
           text: answer,
         },
       ]);
+
+      // Update backend interests based on conversational intent
+      apiService.sendInterestFeedback({
+        interaction_type: 'ai_interaction',
+        story_id: storyId || url,
+        title,
+        source,
+        topics,
+        creators,
+        categories,
+        keywords,
+        ai_query: question,
+        ai_answer: answer,
+        occurred_at: new Date().toISOString(),
+      }).catch(() => undefined);
     } catch (error: any) {
       const message = String(error?.message || 'AI request failed.');
       setChatMessages((current) => [
