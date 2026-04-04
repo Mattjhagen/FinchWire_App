@@ -1417,8 +1417,17 @@ async def serve_media(
     if not verify_token(actual_token):
         raise HTTPException(status_code=401, detail="Unauthorized - valid token required")
     full_path = MEDIA_DIR / file_path
+    
+    # 🕵️ Smart extension lookup (checks for .mp4, .mp3, etc. automatically)
     if not full_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+        for ext in ['.mp4', '.mp3', '.m4a', '.mkv', '.webm', '.ts']:
+            alt_path = Path(str(full_path) + ext)
+            if alt_path.exists():
+                full_path = alt_path
+                break
+                
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
     return FileResponse(full_path)
 
 
