@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+import email.utils
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -11,13 +12,27 @@ def utcnow() -> datetime:
 
 
 def parse_iso(value: str) -> datetime:
-    if not value:
+    if not value or not isinstance(value, str):
         return utcnow()
-    candidate = value.replace("Z", "+00:00")
-    parsed = datetime.fromisoformat(candidate)
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+    
+    # Try ISO format first (FastAPI/JSON default)
+    try:
+        candidate = value.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(candidate)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except ValueError:
+        pass
+
+    # Try RFC 2822 format (Common in RSS feeds e.g. "Sat, 04 Apr 2026 00:03:41 GMT")
+    try:
+        parsed = email.utils.parsedate_to_datetime(value)
+        return parsed.astimezone(timezone.utc)
+    except (ValueError, TypeError):
+        pass
+
+    return utcnow()
 
 
 def isoformat_utc(dt: datetime) -> str:
