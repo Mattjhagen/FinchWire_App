@@ -80,6 +80,15 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/-e 
+.metro-cache/
+frontend/.metro-cache/
+
+# Backend State & Media
+finchwire_state.json
+backend/finchwire_state.json
+media/
+backend/media/
+
 # Environment files
 *.env
 *.env.*
