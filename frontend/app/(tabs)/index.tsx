@@ -60,6 +60,20 @@ const getPlaybackPath = (job: MediaJob): string => {
   return job.relative_path || job.safe_filename || job.media_url || '';
 };
 
+const getExternalLink = (job: MediaJob): string => {
+  const originalUrl = String(job.original_url || '').trim();
+  if (looksLikeUrl(originalUrl)) {
+    return originalUrl;
+  }
+
+  const submittedUrl = String(job.url || '').trim();
+  if (looksLikeUrl(submittedUrl)) {
+    return submittedUrl;
+  }
+
+  return apiService.getExternalMediaUrl(getPlaybackPath(job));
+};
+
 const looksLikeUrl = (value: string): boolean => /^https?:\/\/\S+/i.test(value.trim());
 const looksLikeQuestion = (value: string): boolean => {
   const text = value.trim().toLowerCase();
@@ -1030,7 +1044,7 @@ export default function HomeScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.secondaryBtn]}
-                  onPress={() => openExternal(apiService.getExternalMediaUrl(getPlaybackPath(job)))}
+                  onPress={() => openExternal(getExternalLink(job))}
                 >
                   <Ionicons name="link-outline" size={16} color={colors.text} />
                   <Text style={styles.actionBtnTextSecondary}>Open URL</Text>

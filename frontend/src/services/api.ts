@@ -241,7 +241,7 @@ class ApiService {
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
         console.error('API Error:', error);
-        throw new Error(error.error || `HTTP ${response.status}`);
+        throw new Error(error.error || error.detail || `HTTP ${response.status}`);
       }
 
       const data = await response.json();
@@ -253,7 +253,7 @@ class ApiService {
       if (error.name === 'AbortError') {
         throw new Error('Connection timed out. Server is not responding at ' + this.baseUrl);
       }
-      if (error.message.includes('Network request failed') || error.message.includes('Failed to fetch')) {
+      if (error.message?.includes('Network request failed') || error.message?.includes('Failed to fetch')) {
         throw new Error('Cannot connect to server. Check that the URL is correct and the server is running.');
       }
       throw error;

@@ -7,7 +7,6 @@ import Animated, {
   withSequence,
   withTiming,
   withDelay,
-  Easing,
 } from 'react-native-reanimated';
 import { colors } from '../utils/theme';
 
@@ -19,54 +18,69 @@ interface VoiceVisualizerProps {
 
 const BAR_COUNT = 7;
 
-export function VoiceVisualizer({ isListening, isSpeaking, metering = 0 }: VoiceVisualizerProps) {
-  const animations = Array.from({ length: BAR_COUNT }, () => useSharedValue(1));
+function VisualizerBar({
+  index,
+  isListening,
+  isSpeaking,
+  metering,
+}: {
+  index: number;
+  isListening: boolean;
+  isSpeaking: boolean;
+  metering: number;
+}) {
+  const animation = useSharedValue(1);
 
   useEffect(() => {
     if (isListening) {
-      // Scale based on live metering
-      animations.forEach((anim, i) => {
-        const target = 1 + (metering * (1.5 + (i % 3)));
-        anim.value = withTiming(target, { duration: 80 });
-      });
-    } else if (isSpeaking) {
-      // Pulse generically during playback
-      animations.forEach((anim, i) => {
-        anim.value = withDelay(
-          i * 80,
-          withRepeat(
-            withSequence(withTiming(2, { duration: 300 }), withTiming(1, { duration: 300 })),
-            -1,
-            true
-          )
-        );
-      });
-    } else {
-      animations.forEach((anim) => {
-        anim.value = withTiming(1, { duration: 300 });
-      });
+      const target = 1 + (metering * (1.5 + (index % 3)));
+      animation.value = withTiming(target, { duration: 80 });
+      return;
     }
-  }, [isListening, isSpeaking, metering]);
+
+    if (isSpeaking) {
+      animation.value = withDelay(
+        index * 80,
+        withRepeat(
+          withSequence(withTiming(2, { duration: 300 }), withTiming(1, { duration: 300 })),
+          -1,
+          true
+        )
+      );
+      return;
+    }
+
+    animation.value = withTiming(1, { duration: 300 });
+  }, [animation, index, isListening, isSpeaking, metering]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scaleY: animation.value }],
+    opacity: isListening ? 1 : 0.6,
+  }), [animation, isListening]);
 
   return (
-    <View style={styles.container}>
-      {animations.map((anim, i) => {
-        const animatedStyle = useAnimatedStyle(() => ({
-          transform: [{ scaleY: anim.value }],
-          opacity: isListening ? 1 : 0.6,
-        }));
+    <Animated.View
+      style={[
+        styles.bar,
+        { backgroundColor: isSpeaking ? colors.primary : colors.textSecondary },
+        animatedStyle,
+      ]}
+    />
+  );
+}
 
-        return (
-          <Animated.View
-            key={`bar-${i}`}
-            style={[
-              styles.bar,
-              { backgroundColor: isSpeaking ? colors.primary : colors.textSecondary },
-              animatedStyle,
-            ]}
-          />
-        );
-      })}
+export function VoiceVisualizer({ isListening, isSpeaking, metering = 0 }: VoiceVisualizerProps) {
+  return (
+    <View style={styles.container}>
+      {Array.from({ length: BAR_COUNT }, (_, index) => (
+        <VisualizerBar
+          key={`bar-${index}`}
+          index={index}
+          isListening={isListening}
+          isSpeaking={isSpeaking}
+          metering={metering}
+        />
+      ))}
     </View>
   );
 }

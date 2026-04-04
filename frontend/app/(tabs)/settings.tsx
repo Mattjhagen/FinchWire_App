@@ -267,9 +267,13 @@ export default function SettingsScreen() {
     try {
       await apiService.changePassword(currentPassword, newPassword.trim());
 
-      const sessionToken = `session:${newPassword.trim()}`;
-      apiService.setAuthToken(sessionToken);
-      await setAuthToken(sessionToken);
+      const relogin = await apiService.login(newPassword.trim());
+      if (!relogin.success || !relogin.token) {
+        throw new Error(relogin.error || 'Password changed, but re-authentication failed.');
+      }
+
+      apiService.setAuthToken(relogin.token);
+      await setAuthToken(relogin.token);
 
       await saveSettings({ ...settings, password: newPassword.trim() });
 

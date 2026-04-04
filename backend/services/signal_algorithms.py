@@ -119,11 +119,11 @@ def update_interest_vector(
     occurred_at: Optional[datetime] = None,
 ) -> Dict[str, object]:
     base = dict(vector or create_interest_vector())
-    base.setdefault("topics", {})
-    base.setdefault("sources", {})
-    base.setdefault("creators", {})
-    base.setdefault("categories", {})
-    base.setdefault("keywords", {})
+    base["topics"] = dict(base.get("topics") or {})
+    base["sources"] = dict(base.get("sources") or {})
+    base["creators"] = dict(base.get("creators") or {})
+    base["categories"] = dict(base.get("categories") or {})
+    base["keywords"] = dict(base.get("keywords") or {})
 
     weight = float(DEFAULT_INTERACTION_WEIGHTS.get(interaction_type, 1.0))
     weight = weight * max(0.05, float(weight_scale))
@@ -150,6 +150,9 @@ def decay_interest_vector(
     half_life_days: float = 14.0,
 ) -> Dict[str, object]:
     base = dict(vector or create_interest_vector())
+    for field in ("topics", "sources", "creators", "categories", "keywords"):
+        base[field] = dict(base.get(field) or {})
+
     last_updated = parse_iso(str(base.get("updatedAt", "")))
     current = now or utcnow()
     elapsed_hours = max(0.0, (current - last_updated).total_seconds() / 3600.0)

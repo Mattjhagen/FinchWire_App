@@ -148,7 +148,7 @@ backend/
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `FINCHWIRE_ADMIN_PASSWORD` | Yes | Admin login password bootstrap |
-| `SECRET_KEY` | Yes (prod) | JWT signing secret |
+| `FINCHWIRE_SECRET_KEY` | Yes (prod) | JWT signing secret |
 | `FINCHWIRE_STATE_FILE` | No | Override JSON state path |
 | `FINCHWIRE_PUBLIC_BASE_URL` | No | Canonical URL for generated media links |
 | `FINCHWIRE_NEWS_FEEDS` | No | Comma-separated RSS feed list override |
@@ -175,7 +175,7 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 export FINCHWIRE_ADMIN_PASSWORD='change-me'
-export SECRET_KEY='change-me-too'
+export FINCHWIRE_SECRET_KEY='change-me-too'
 uvicorn server:app --host 0.0.0.0 --port 8080
 ```
 

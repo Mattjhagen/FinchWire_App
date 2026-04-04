@@ -56,6 +56,7 @@ const toSharedMediaDomain = (url: string): string => {
     return 'shared';
   }
 };
+const looksLikeUrl = (value: string): boolean => /^https?:\/\/\S+/i.test(String(value || '').trim());
 
 export default function PlayerScreen() {
   const { id, url: sharedUrlParam, title: sharedTitleParam } = useLocalSearchParams<{
@@ -301,9 +302,31 @@ export default function PlayerScreen() {
         setDuration(player.duration * 1000);
       }
       if (status === 'error') {
+        const alertButtons: { text: string; style?: 'default' | 'cancel' | 'destructive'; onPress?: () => void }[] = [
+          {
+            text: 'Open in VLC',
+            onPress: () => {
+              void handleOpenInVlc();
+            },
+          },
+        ];
+
+        const originalLink = String(media?.original_url || media?.url || '').trim();
+        if (looksLikeUrl(originalLink)) {
+          alertButtons.push({
+            text: 'Open Source Link',
+            onPress: () => {
+              void handleOpenOriginalLink();
+            },
+          });
+        }
+
+        alertButtons.push({ text: 'Close', style: 'cancel' });
+
         Alert.alert(
           'Playback Error',
-          'Could not play this media in-app. Re-download from the Add tab and try again.'
+          'This file could not play in the in-app player. Try VLC for broader codec support, or open the original source link.',
+          alertButtons
         );
       }
     });
@@ -334,7 +357,7 @@ export default function PlayerScreen() {
       statusSubscription.remove();
       timeUpdateSubscription.remove();
     };
-  }, [isScrubbing, media?.id, player, savePosition]);
+  }, [handleOpenInVlc, handleOpenOriginalLink, isScrubbing, media?.id, media?.original_url, media?.url, player, savePosition]);
 
   const setupAudio = async () => {
     await Audio.setAudioModeAsync({
@@ -549,6 +572,20 @@ export default function PlayerScreen() {
       console.error('Error sharing:', error);
     }
   };
+
+  const handleOpenOriginalLink = useCallback(async () => {
+    const originalLink = String(media?.original_url || media?.url || '').trim();
+    if (!looksLikeUrl(originalLink)) {
+      Alert.alert('Original link unavailable', 'This item does not have a valid source URL to open.');
+      return;
+    }
+
+    try {
+      await Linking.openURL(originalLink);
+    } catch {
+      Alert.alert('Unable to open link', 'Please try again.');
+    }
+  }, [media]);
 
   const handleOpenInVlc = useCallback(async () => {
     if (!media) return;
