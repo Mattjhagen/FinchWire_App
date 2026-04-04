@@ -46,6 +46,7 @@ from services.signal_algorithms import (
     utcnow,
 )
 from services.state_store import JsonStateStore
+from services.media_downloader import media_worker_loop
 
 
 ROOT_DIR = Path(__file__).parent
@@ -1443,6 +1444,7 @@ async def _background_alert_scheduler() -> None:
 @app.on_event("startup")
 async def startup_event():
     app.state.alert_task = asyncio.create_task(_background_alert_scheduler())
+    app.state.download_task = asyncio.create_task(media_worker_loop(store, MEDIA_DIR))
 
 
 @app.on_event("shutdown")

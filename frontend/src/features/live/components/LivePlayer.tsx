@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
+import { Video, ResizeMode, Audio } from 'expo-av';
 import { borderRadius, colors, spacing, typography } from '../../../utils/theme';
 import { LiveChannel } from '../types';
 import { getLiveEmbedResult } from '../providers';
@@ -89,6 +90,15 @@ export function LivePlayer({ channel }: LivePlayerProps) {
       if (loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current);
     };
   }, [channel?.id]);
+
+  useEffect(() => {
+    // Ensure audio works in silent mode for live streams
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: true,
+      shouldDuckAndroid: true,
+    }).catch(() => undefined);
+  }, []);
 
   const handleMessage = useCallback((event: WebViewMessageEvent) => {
     try {
@@ -196,41 +206,61 @@ export function LivePlayer({ channel }: LivePlayerProps) {
         </View>
       ) : null}
 
-      <WebView
-        key={`vid-${channel.id}-${mountKey}`}
-        source={{ uri: embed.url }}
-        style={{ width: playerWidth, height: playerHeight, backgroundColor: '#000' }}
-        allowsFullscreenVideo
-        allowsInlineMediaPlayback
-        mediaPlaybackRequiresUserAction={false}
-        onLoadStart={() => { setIsLoading(true); setRuntimeError(null); }}
-        onLoadEnd={() => { setIsLoading(false); if(loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current); }}
-        onError={() => { 
-          setRuntimeError('Could not connect to the stream. Network error or restricted.'); 
-          setIsLoading(false); 
-          if(loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current);
-        }}
-        onHttpError={(e) => {
-          const code = e.nativeEvent.statusCode;
-          setRuntimeError(`Stream returned error ${code}. Try watching on YouTube.`);
-          setIsLoading(false);
-          if(loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current);
-        }}
-        userAgent={WEBVIEW_USER_AGENT}
-        javaScriptEnabled
-        injectedJavaScript={YT_ERROR_LISTENER_JS}
-        onMessage={handleMessage}
-        renderError={() => (
-          <View style={styles.loadingOverlay}>
-            <Text style={styles.loadingText}>Stream Connection Error</Text>
-          </View>
-        )}
-        renderLoading={() => (
-          <View style={styles.loadingOverlay}>
-             <ActivityIndicator color={colors.primary} size="small" />
-          </View>
-        )}
-      />
+      {channel.provider === 'hls' ? (
+        <Video
+          key={`hls-${channel.id}-${mountKey}`}
+          source={{ uri: embed.url || '' }}
+          style={{ width: playerWidth, height: playerHeight, backgroundColor: '#000' }}
+          useNativeControls={isFullscreen || isLandscape}
+          resizeMode={ResizeMode.CONTAIN}
+          shouldPlay
+          isLooping={false}
+          onLoadStart={() => { setIsLoading(true); setRuntimeError(null); }}
+          onLoad={() => { setIsLoading(false); if(loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current); }}
+          onError={(err) => {
+            console.error('HLS Player Error:', err);
+            setRuntimeError('Could not load stream. It may be restricted or offline.');
+            setIsLoading(false);
+            if(loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current);
+          }}
+        />
+      ) : (
+        <WebView
+          key={`vid-${channel.id}-${mountKey}`}
+          source={{ uri: embed.url }}
+          style={{ width: playerWidth, height: playerHeight, backgroundColor: '#000' }}
+          allowsFullscreenVideo
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          onLoadStart={() => { setIsLoading(true); setRuntimeError(null); }}
+          onLoadEnd={() => { setIsLoading(false); if(loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current); }}
+          onError={() => { 
+            setRuntimeError('Could not connect to the stream. Network error or restricted.'); 
+            setIsLoading(false); 
+            if(loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current);
+          }}
+          onHttpError={(e) => {
+            const code = e.nativeEvent.statusCode;
+            setRuntimeError(`Stream returned error ${code}. Try watching on YouTube.`);
+            setIsLoading(false);
+            if(loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current);
+          }}
+          userAgent={WEBVIEW_USER_AGENT}
+          javaScriptEnabled
+          injectedJavaScript={YT_ERROR_LISTENER_JS}
+          onMessage={handleMessage}
+          renderError={() => (
+            <View style={styles.loadingOverlay}>
+              <Text style={styles.loadingText}>Stream Connection Error</Text>
+            </View>
+          )}
+          renderLoading={() => (
+            <View style={styles.loadingOverlay}>
+               <ActivityIndicator color={colors.primary} size="small" />
+            </View>
+          )}
+        />
+      )}
 
       {/* Tappable overlay to show/hide controls in fullscreen */}
       <TouchableOpacity

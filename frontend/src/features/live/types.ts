@@ -1,4 +1,4 @@
-export type ChannelProvider = 'youtube' | 'twitch';
+export type ChannelProvider = 'youtube' | 'twitch' | 'hls';
 
 export type LiveChannelEmbedType = 'video' | 'playlist' | 'live';
 
@@ -9,6 +9,7 @@ export interface LiveChannel {
   embedType: LiveChannelEmbedType;
   videoId?: string;
   playlistId?: string;
+  streamUrl?: string;
   thumbnail?: string;
   description?: string;
   category?: string;

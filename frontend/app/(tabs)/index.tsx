@@ -3,6 +3,7 @@ import {
   Alert,
   type AlertButton,
   Linking,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -22,7 +23,12 @@ import { useSettingsStore } from '../../src/store/settingsStore';
 import { AssetType, LiveStory, MediaJob } from '../../src/types';
 import { homeProviders } from '../../src/features/home/providers';
 import { HOME_TILE_LABELS, normalizeTilePreferences } from '../../src/features/home/tileRegistry';
-import { fetchRssFeed, PRESET_RSS_FEEDS, type RssItem } from '../../src/services/widgets';
+import { PRESET_RSS_FEEDS, type RssItem, fetchRssFeed } from '../../src/services/widgets';
+import { Audio } from 'expo-av';
+import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system/legacy';
+import { VoiceVisualizer } from '../../src/components/VoiceVisualizer';
+import { TypingIndicator } from '../../src/components/TypingIndicator';
 
 const MARKET_CHOICES: { symbol: string; assetType: AssetType; label: string }[] = [
   { symbol: 'BTC', assetType: 'crypto', label: 'BTC' },
@@ -156,6 +162,12 @@ export default function HomeScreen() {
   const [feedFilter, setFeedFilter] = useState('');
   const [hiddenStoryIds, setHiddenStoryIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isVoiceOverlayVisible, setIsVoiceOverlayVisible] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [metering, setMetering] = useState(0);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
   const impressionSentRef = useRef<Set<string>>(new Set());
 
   const homeSettings = useMemo(() => {
@@ -285,6 +297,23 @@ export default function HomeScreen() {
   }, [feed, feedFilter, hiddenStoryIds, homeSettings.followedCreators, homeSettings.followedSources, homeSettings.followedTopics, prompt]);
 
   useEffect(() => {
+    // Enable background audio mode globally for this screen
+    Audio.setAudioModeAsync({
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: true,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    }).catch(() => undefined);
+
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => undefined);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     personalizedFeed.slice(0, 8).forEach((story) => {
       if (impressionSentRef.current.has(story.id)) return;
       impressionSentRef.current.add(story.id);
@@ -377,6 +406,137 @@ export default function HomeScreen() {
       Alert.alert('Queue Error', error?.message || 'Failed to queue this URL.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const toggleVoiceInteraction = async () => {
+    if (isRecording) {
+      await stopRecording();
+    } else {
+      await startRecording();
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status !== 'granted') {
+        Alert.alert('Permission needed', 'Please enable microphone access in your settings.');
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      recordingRef.current = recording;
+      setIsRecording(true);
+      setIsVoiceOverlayVisible(true);
+    } catch (err) {
+      console.error('Failed to start recording', err);
+    }
+  };
+
+  const stopRecording = async () => {
+    setIsRecording(false);
+    if (!recordingRef.current) return;
+
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+      recordingRef.current = null;
+
+      if (uri) {
+        processVoiceCommand(uri);
+      } else {
+        setIsVoiceOverlayVisible(false);
+      }
+    } catch (err) {
+      console.error('Failed to stop recording', err);
+      setIsVoiceOverlayVisible(false);
+    }
+  };
+
+  const processVoiceCommand = async (uri: string) => {
+    setIsSubmitting(true);
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      
+      const response = await apiService.runAiSpeechSearch(
+        base64,
+        Platform.OS === 'ios' ? 'audio/x-m4a' : 'audio/amr',
+        'Ask AI a question based on your news library.'
+      );
+
+      const answer = (response.answer || '').trim();
+      if (answer) {
+        playTextToSpeech(answer);
+        
+        const alertButtons: AlertButton[] = [{ text: 'OK', style: 'cancel' }];
+        const recommendedQuery = String(response.query || '').trim();
+        const suggestedUrl = String(response.suggested_url || '').trim();
+
+        if (suggestedUrl) {
+          alertButtons.unshift({
+            text: 'Queue Suggested Media',
+            onPress: () => handleQueueUrl(suggestedUrl).catch(() => undefined),
+          });
+        }
+
+        if (recommendedQuery) {
+          setFeedFilter(recommendedQuery);
+          await refetchFeed();
+        }
+
+        Alert.alert(
+          `AI (${String(response.provider || 'none').toUpperCase()})`,
+          answer,
+          alertButtons
+        );
+      }
+    } catch (err) {
+      console.error('Voice process failed', err);
+      Alert.alert('AI Error', 'Voice processing failed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+      setIsVoiceOverlayVisible(false);
+    }
+  };
+
+  const playTextToSpeech = async (text: string) => {
+    try {
+      setIsSpeaking(true);
+      const response = await apiService.runAiTts(text);
+      
+      if (response.audio_base64) {
+        const fileUri = `${FileSystem.cacheDirectory}home_speech.mp3`;
+        await FileSystem.writeAsStringAsync(fileUri, response.audio_base64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        if (soundRef.current) await soundRef.current.unloadAsync();
+        const { sound } = await Audio.Sound.createAsync({ uri: fileUri });
+        soundRef.current = sound;
+        await sound.playAsync();
+        sound.setOnPlaybackStatusUpdate((status: any) => {
+          if (status.didJustFinish) setIsSpeaking(false);
+        });
+      }
+    } catch (err) {
+      console.error('TTS failed', err);
+      setIsSpeaking(false);
     }
   };
 
@@ -502,6 +662,13 @@ export default function HomeScreen() {
         <Text style={styles.brandSub}>Personalized signal dashboard for media + news</Text>
 
         <View style={styles.searchBar}>
+          <TouchableOpacity 
+            style={styles.micButton} 
+            onPress={toggleVoiceInteraction}
+            disabled={isSubmitting}
+          >
+            <Ionicons name="mic" size={20} color={colors.primary} />
+          </TouchableOpacity>
           <TextInput
             style={styles.searchInput}
             value={prompt}
@@ -877,6 +1044,18 @@ export default function HomeScreen() {
           ) : null}
         </View>
       </ScrollView>
+
+      {isVoiceOverlayVisible && (
+        <View style={styles.voiceOverlay}>
+          <VoiceVisualizer isListening={isRecording} isSpeaking={isSpeaking} metering={metering} />
+          <Text style={styles.voiceHint}>
+            {isRecording ? 'Listening...' : isSpeaking ? 'Speaking...' : 'Thinking...'}
+          </Text>
+          <TouchableOpacity style={styles.stopVoiceBtn} onPress={stopRecording}>
+            <Ionicons name="stop-circle" size={48} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -1336,5 +1515,25 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.text,
     fontWeight: '700',
+  },
+  micButton: {
+    padding: 8,
+    marginRight: 4,
+  },
+  voiceOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    zIndex: 1000,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 32,
+  },
+  voiceHint: {
+    ...typography.h3,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  stopVoiceBtn: {
+    marginTop: 20,
   },
 });
