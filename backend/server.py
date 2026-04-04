@@ -176,11 +176,13 @@ def _build_media_url(base_url: str, path: str, token: str) -> str:
 
 
 def _default_settings() -> Dict[str, Any]:
+    ai_provider = os.environ.get("FINCHWIRE_AI_PROVIDER", "none")
+    tts_provider = os.environ.get("FINCHWIRE_TTS_PROVIDER", "none")
     return {
-        "ai_provider": "none",
-        "tts_provider": "none",
-        "ai_api_key": "",
-        "tts_api_key": "",
+        "ai_provider": ai_provider,
+        "tts_provider": tts_provider,
+        "ai_api_key": os.environ.get("GEMINI_API_KEY", ""),
+        "tts_api_key": os.environ.get("GEMINI_API_KEY", ""),  # Fallback for voice too
         "weather_provider": "open_meteo",
         "market_provider": "coingecko_yahoo",
         "weather_api_key": "",
@@ -189,8 +191,8 @@ def _default_settings() -> Dict[str, Any]:
         "weather_location": os.environ.get("FINCHWIRE_WEATHER_LOCATION", "Omaha, NE"),
         "weather_lat": os.environ.get("FINCHWIRE_WEATHER_LAT", "41.2565"),
         "weather_lon": os.environ.get("FINCHWIRE_WEATHER_LON", "-95.9345"),
-        "has_ai_api_key": False,
-        "has_tts_api_key": False,
+        "has_ai_api_key": bool(os.environ.get("GEMINI_API_KEY")),
+        "has_tts_api_key": bool(os.environ.get("GEMINI_API_KEY")),
         "has_weather_api_key": False,
         "has_market_api_key": False,
         "has_youtube_api_key": False,
