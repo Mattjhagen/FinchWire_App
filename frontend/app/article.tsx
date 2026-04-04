@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -15,8 +16,13 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
+import { Audio } from 'expo-av';
+import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system/legacy';
 import { borderRadius, colors, spacing, typography } from '../src/utils/theme';
 import { apiService } from '../src/services/api';
+import { VoiceVisualizer } from '../src/components/VoiceVisualizer';
+import { TypingIndicator } from '../src/components/TypingIndicator';
 
 const decodeParam = (value: string | string[] | undefined): string => {
   if (!value) return '';
@@ -47,6 +53,7 @@ type ArticleChatMessage = {
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  isAudio?: boolean;
 };
 
 const buildArticleAwarePrompt = (question: string, articleTitle: string, articleSource: string, articleUrl: string): string => {
@@ -72,10 +79,20 @@ export default function ArticleScreen() {
     creators?: string;
     categories?: string;
   }>();
+  
   const [isLoading, setIsLoading] = useState(true);
   const [chatInput, setChatInput] = useState('');
   const [isAskingAi, setIsAskingAi] = useState(false);
   const [chatMessages, setChatMessages] = useState<ArticleChatMessage[]>([]);
+  
+  // Voice states
+  const [isVoiceOverlayVisible, setIsVoiceOverlayVisible] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [metering, setMetering] = useState(0);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
   const startedAtRef = useRef<number>(Date.now());
   const activeStartRef = useRef<number>(Date.now());
   const activeReadMsRef = useRef<number>(0);
@@ -89,22 +106,6 @@ export default function ArticleScreen() {
   const keywords = useMemo(() => decodeJsonListParam(params.keywords), [params.keywords]);
   const creators = useMemo(() => decodeJsonListParam(params.creators), [params.creators]);
   const categories = useMemo(() => decodeJsonListParam(params.categories), [params.categories]);
-
-  useEffect(() => {
-    if (!url) return;
-    apiService.sendFeedInteraction({
-      item_id: storyId || url,
-      item_type: 'story',
-      event_type: 'open',
-      title,
-      source,
-      topics,
-      creators,
-      categories,
-      keywords,
-      occurred_at: new Date().toISOString(),
-    }).catch(() => undefined);
-  }, [categories, creators, keywords, source, storyId, title, topics, url]);
 
   useEffect(() => {
     if (!url) return;
@@ -145,6 +146,9 @@ export default function ArticleScreen() {
           occurred_at: new Date().toISOString(),
         }).catch(() => undefined);
       }
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => undefined);
+      }
     };
   }, [categories, creators, keywords, source, storyId, title, topics, url]);
 
@@ -156,10 +160,118 @@ export default function ArticleScreen() {
     }
   };
 
+  const toggleVoiceInteraction = async () => {
+    if (isRecording) {
+      await stopRecording();
+    } else {
+      await startRecording();
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status !== 'granted') return;
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      recordingRef.current = recording;
+      setIsRecording(true);
+      setIsVoiceOverlayVisible(true);
+    } catch (err) {
+      console.error('Failed to start recording', err);
+    }
+  };
+
+  const stopRecording = async () => {
+    setIsRecording(false);
+    if (!recordingRef.current) return;
+
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+      recordingRef.current = null;
+
+      if (uri) {
+        processVoiceCommand(uri);
+      } else {
+        setIsVoiceOverlayVisible(false);
+      }
+    } catch (err) {
+      console.error('Failed to stop recording', err);
+      setIsVoiceOverlayVisible(false);
+    }
+  };
+
+  const processVoiceCommand = async (uri: string) => {
+    setIsAskingAi(true);
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      
+      const response = await apiService.runAiSpeechSearch(
+        base64,
+        Platform.OS === 'ios' ? 'audio/x-m4a' : 'audio/amr',
+        buildArticleAwarePrompt('User spoken query', title, source, url)
+      );
+
+      const answer = (response.answer || '').trim();
+      if (answer) {
+        setChatMessages(prev => [...prev, {
+          id: `ai-voice-${Date.now()}`,
+          role: 'assistant',
+          text: answer
+        }]);
+        playTextToSpeech(answer);
+      }
+    } catch (err) {
+      console.error('Voice process failed', err);
+    } finally {
+      setIsAskingAi(false);
+      setIsVoiceOverlayVisible(false);
+    }
+  };
+
+  const playTextToSpeech = async (text: string) => {
+    try {
+      setIsSpeaking(true);
+      const response = await apiService.runAiTts(text);
+      
+      if (response.audio_base64) {
+        const fileUri = `${FileSystem.cacheDirectory}speech.mp3`;
+        await FileSystem.writeAsStringAsync(fileUri, response.audio_base64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        if (soundRef.current) await soundRef.current.unloadAsync();
+        const { sound } = await Audio.Sound.createAsync({ uri: fileUri });
+        soundRef.current = sound;
+        await sound.playAsync();
+        sound.setOnPlaybackStatusUpdate((status: any) => {
+          if (status.didJustFinish) setIsSpeaking(false);
+        });
+      }
+    } catch (err) {
+      console.error('TTS failed', err);
+      setIsSpeaking(false);
+    }
+  };
+
   const askArticleQuestion = async () => {
     const question = chatInput.trim();
     if (!question) return;
 
+    Keyboard.dismiss();
     const userMessage: ArticleChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -211,8 +323,8 @@ export default function ArticleScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
       <View style={styles.header}>
         <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()}>
@@ -245,7 +357,19 @@ export default function ArticleScreen() {
       />
 
       <View style={styles.chatPanel}>
-        <Text style={styles.chatTitle}>Ask FinchWire AI</Text>
+        <View style={styles.chatHeader}>
+          <Text style={styles.chatTitle}>Ask FinchWire AI</Text>
+          <TouchableOpacity
+            style={styles.summarizeBtn}
+            onPress={() => {
+              setChatInput('Summarize this article in 1-2 concise sentences.');
+              askArticleQuestion();
+            }}
+            disabled={isAskingAi}
+          >
+            <Text style={styles.summarizeBtnText}>Summarize</Text>
+          </TouchableOpacity>
+        </View>
         <ScrollView style={styles.chatHistory} contentContainerStyle={styles.chatHistoryContent}>
           {chatMessages.length === 0 ? (
             <Text style={styles.chatHint}>
@@ -272,7 +396,13 @@ export default function ArticleScreen() {
             ))
           )}
         </ScrollView>
+
+        {isAskingAi && chatMessages.length > 0 && <TypingIndicator />}
+
         <View style={styles.chatComposer}>
+          <TouchableOpacity style={styles.voiceBtn} onPress={toggleVoiceInteraction}>
+            <Ionicons name="mic" size={20} color={colors.primary} />
+          </TouchableOpacity>
           <TextInput
             style={styles.chatInput}
             value={chatInput}
@@ -294,6 +424,18 @@ export default function ArticleScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {isVoiceOverlayVisible && (
+        <View style={styles.voiceOverlay}>
+          <VoiceVisualizer isListening={isRecording} isSpeaking={isSpeaking} metering={metering} />
+          <Text style={styles.voiceHint}>
+            {isRecording ? 'Listening...' : isSpeaking ? 'Speaking...' : 'Thinking...'}
+          </Text>
+          <TouchableOpacity style={styles.stopVoiceBtn} onPress={stopRecording}>
+            <Ionicons name="stop-circle" size={48} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -346,10 +488,27 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
   },
+  chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
   chatTitle: {
     ...typography.caption,
     color: colors.textSecondary,
-    marginBottom: spacing.xs,
+    fontWeight: '700',
+  },
+  summarizeBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  summarizeBtnText: {
+    ...typography.caption,
+    fontSize: 10,
+    color: colors.buttonText,
     fontWeight: '700',
   },
   chatHistory: {
@@ -400,10 +559,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.background,
-    color: colors.text,
     paddingHorizontal: spacing.sm,
     paddingVertical: 8,
     ...typography.caption,
+    color: colors.text,
   },
   chatSendButton: {
     width: 36,
@@ -431,6 +590,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
+  },
+  voiceOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    zIndex: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 24,
+  },
+  voiceHint: {
+    ...typography.body,
+    color: '#fff',
+    fontWeight: '700',
+  },
+  voiceBtn: {
+    padding: 8,
+  },
+  stopVoiceBtn: {
+    marginTop: 20,
   },
   loadingText: {
     ...typography.caption,

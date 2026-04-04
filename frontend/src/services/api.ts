@@ -337,6 +337,25 @@ class ApiService {
     return response;
   }
 
+  async runAiSpeechSearch(audioBase64: string, mimeType: string, prompt?: string): Promise<AiSearchResponse> {
+    const response = await this.request<AiSearchApiResponse>(API_ENDPOINTS.AI_SPEECH, {
+      method: 'POST',
+      body: JSON.stringify({
+        audio_base64: audioBase64,
+        mime_type: mimeType,
+        prompt: prompt || 'Transcribe and provide a useful answer concisely.'
+      }),
+    });
+    return response;
+  }
+
+  async runAiTts(text: string, voiceId?: string): Promise<{ audio_base64: string; format: string }> {
+    return this.request<{ audio_base64: string; format: string }>(API_ENDPOINTS.AI_SPEECH.replace('/speech', '/tts'), {
+      method: 'POST',
+      body: JSON.stringify({ text, voice_id: voiceId }),
+    });
+  }
+
   async getHomeWeather(unit: TemperatureUnit = 'f'): Promise<WeatherSnapshot> {
     const response = await this.request<HomeWeatherResponse>(`${API_ENDPOINTS.HOME_WEATHER}?unit=${unit}`);
     return response.snapshot;

@@ -8,7 +8,7 @@ import logging
 import os
 import secrets
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import quote, urlparse
 import uuid
 
@@ -630,6 +630,17 @@ class AiSearchRequest(BaseModel):
     prompt: str
 
 
+class AiSpeechRequest(BaseModel):
+    audio_base64: str
+    mime_type: str
+    prompt: Optional[str] = None
+
+
+class TtsRequest(BaseModel):
+    text: str
+    voice_id: Optional[str] = None
+
+
 class StoryFeedbackRequest(BaseModel):
     interaction_type: str
     story_id: Optional[str] = None
@@ -817,6 +828,82 @@ async def ai_search(payload: AiSearchRequest, user: str = Depends(get_current_us
     except AiSearchError as exc:
         logger.error(f"AI search failed: {exc}")
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return {
+        "success": True,
+        "provider": provider,
+        **result.as_dict(),
+    }
+
+
+@api_router.post("/ai/tts")
+async def ai_tts(payload: TtsRequest, user: str = Depends(get_current_user)):
+    settings = _settings_state()
+    provider = settings.get("tts_provider", "none")
+    if provider == "none":
+        raise HTTPException(
+            status_code=400,
+            detail="TTS provider is not configured. Enable it in Settings → AI + Voice.",
+        )
+
+    api_key = _resolve_ai_api_key(provider, settings)
+    if not api_key:
+        api_key = settings.get("tts_api_key", "")
+    
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{provider.title()} API key is missing. Add it in Settings → AI + Voice.",
+        )
+
+    try:
+        from services.ai_voice import run_tts
+        audio_base64 = run_tts(
+            text=payload.text,
+            provider=provider,
+            api_key=api_key,
+            voice_id=payload.voice_id,
+        )
+    except Exception as exc:
+        logger.error(f"TTS failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Voice Generation Unavailable: {str(exc)}")
+
+    return {
+        "success": True,
+        "provider": provider,
+        "audio_base64": audio_base64,
+        "format": "mp3",
+    }
+
+
+@api_router.post("/ai/speech")
+async def ai_speech(payload: AiSpeechRequest, user: str = Depends(get_current_user)):
+    settings = _settings_state()
+    provider = _normalized_ai_provider(settings.get("ai_provider", "none"))
+    if provider != "gemini":
+        raise HTTPException(
+            status_code=400,
+            detail="Speech AI is currently only supported via Gemini. Switch provider in Settings.",
+        )
+
+    api_key = _resolve_ai_api_key(provider, settings)
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Gemini API key is missing. Add it in Settings → AI + Voice.",
+        )
+
+    try:
+        from services.ai_search import run_ai_speech_search
+        result = run_ai_speech_search(
+            api_key=api_key,
+            audio_base64=payload.audio_base64,
+            mime_type=payload.mime_type,
+            prompt=payload.prompt or "Transcribe and answer concisely.",
+        )
+    except Exception as exc:
+        logger.error(f"AI speech failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Voice AI Unavailable: {str(exc)}")
 
     return {
         "success": True,

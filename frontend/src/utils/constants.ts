@@ -26,6 +26,7 @@ export const API_ENDPOINTS = {
   HOME_MARKET: '/api/home/market',
   HOME_VERSE: '/api/home/verse',
   AI_SEARCH: '/api/ai/search',
+  AI_SPEECH: '/api/ai/speech',
   FEED_INTERACTIONS: '/api/interactions/feed',
   INTERESTS_ME: '/api/interests/me',
   INTERESTS_FEEDBACK: '/api/interests/feedback',

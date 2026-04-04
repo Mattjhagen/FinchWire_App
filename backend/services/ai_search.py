@@ -147,7 +147,7 @@ def _run_openai_compatible(
     raise AiSearchError("Provider response missing choices")
 
 
-def _run_gemini(prompt: str, api_key: str) -> AiSearchResult:
+def _run_gemini(prompt: str, api_key: str, audio_base64: str | None = None, audio_mime: str | None = None) -> AiSearchResult:
     configured_model = os.environ.get("FINCHWIRE_GEMINI_MODEL", "").strip()
     # Prioritize the verified model 'gemini-flash-latest' and the v1beta endpoint
     models_to_try = [configured_model] if configured_model else ["gemini-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
@@ -157,11 +157,17 @@ def _run_gemini(prompt: str, api_key: str) -> AiSearchResult:
         if not model: continue
         # Use v1beta (verified working)
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        
+        parts = []
+        if audio_base64 and audio_mime:
+            parts.append({"inlineData": {"mimeType": audio_mime, "data": audio_base64}})
+        parts.append({"text": str(prompt or "Summarize this audio clip.").strip()})
+        
         payload = {
             "contents": [
                 {"role": "user", "parts": [{"text": _PROMPT_TEMPLATE}]},
                 {"role": "model", "parts": [{"text": "Understood. I will act as the FinchWire AI assistant."}]},
-                {"role": "user", "parts": [{"text": str(prompt or "").strip()}]}
+                {"role": "user", "parts": parts}
             ],
             "generationConfig": {"temperature": 0.25},
         }
@@ -169,8 +175,8 @@ def _run_gemini(prompt: str, api_key: str) -> AiSearchResult:
             data = _request_json(endpoint, headers={"Content-Type": "application/json"}, payload=payload)
             candidates = data.get("candidates")
             if isinstance(candidates, list) and candidates:
-                parts = candidates[0].get("content", {}).get("parts", [])
-                text_chunks = [str(part.get("text") or "") for part in parts if isinstance(part, dict)]
+                parts_out = candidates[0].get("content", {}).get("parts", [])
+                text_chunks = [str(part.get("text") or "") for part in parts_out if isinstance(part, dict)]
                 return _normalize_result(prompt, "\n".join(text_chunks).strip())
             raise AiSearchError(f"Gemini response for '{model}' missing candidates")
         except AiSearchError as exc:
@@ -254,3 +260,12 @@ def run_ai_search(prompt: str, provider: str, api_key: str) -> AiSearchResult:
         return _run_anthropic(normalized_prompt, normalized_key)
 
     raise AiSearchError(f"Unsupported AI provider: {normalized_provider}")
+
+
+def run_ai_speech_search(
+    api_key: str,
+    audio_base64: str,
+    mime_type: str,
+    prompt: str = "Transcribe and answer concisely.",
+) -> AiSearchResult:
+    return _run_gemini(prompt, api_key, audio_base64=audio_base64, audio_mime=mime_type)
