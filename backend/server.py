@@ -1455,7 +1455,20 @@ async def shutdown_event():
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
-# Mount the static website files after all other routes
+# Setup Static Directories
+FRONTEND_DIST = ROOT_DIR.parent / "frontend" / "dist"
 WEBSITE_DIR = ROOT_DIR.parent / "website"
+
+# 1. Mount Terms & Privacy from the marketing folder first
 if WEBSITE_DIR.exists():
+    if (WEBSITE_DIR / "privacy").exists():
+        app.mount("/privacy", StaticFiles(directory=str(WEBSITE_DIR / "privacy"), html=True), name="privacy")
+    if (WEBSITE_DIR / "terms").exists():
+        app.mount("/terms", StaticFiles(directory=str(WEBSITE_DIR / "terms"), html=True), name="terms")
+
+# 2. Mount the Main Media Player Dashboard as the Root
+if FRONTEND_DIST.exists():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="dashboard")
+elif WEBSITE_DIR.exists():
+    # Fallback to Landing Page if Player isn't built/pushed yet
     app.mount("/", StaticFiles(directory=str(WEBSITE_DIR), html=True), name="website")
