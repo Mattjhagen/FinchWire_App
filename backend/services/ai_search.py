@@ -148,7 +148,7 @@ def _run_openai_compatible(
 
 
 def _run_gemini(prompt: str, api_key: str) -> AiSearchResult:
-    model = os.environ.get("FINCHWIRE_GEMINI_MODEL", "gemini-2.0-flash").strip() or "gemini-2.0-flash"
+    model = os.environ.get("FINCHWIRE_GEMINI_MODEL", "gemini-pro").strip() or "gemini-pro"
     endpoint = (
         f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
         f"?key={api_key}"
