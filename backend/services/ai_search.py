@@ -149,12 +149,14 @@ def _run_openai_compatible(
 
 def _run_gemini(prompt: str, api_key: str) -> AiSearchResult:
     configured_model = os.environ.get("FINCHWIRE_GEMINI_MODEL", "").strip()
-    models_to_try = [configured_model] if configured_model else ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro", "gemini-2.0-flash-exp"]
+    # Prioritize the verified model 'gemini-flash-latest' and the v1beta endpoint
+    models_to_try = [configured_model] if configured_model else ["gemini-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
     
     last_exc = None
     for model in models_to_try:
         if not model: continue
-        endpoint = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={api_key}"
+        # Use v1beta (verified working)
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         payload = {
             "contents": [
                 {"role": "user", "parts": [{"text": _PROMPT_TEMPLATE}]},
