@@ -121,15 +121,24 @@ class ApiService {
 
   private normalizeMediaPath(filename: string): string {
     if (!filename) return '';
-    return filename
+    let path = filename
       .replace(/\\/g, '/')
       .replace(/^vlc:\/\/https?:\/\//i, '')
       .replace(/^vlc-x-callback:\/\/x-callback-url\/stream\?url=https?:\/\//i, '')
       .replace(/^https?:\/\/[^/]+\/media\//i, '')
       .replace(/^\/+/, '')
       .replace(/^media\//i, '')
-      .replace(/\?.*$/, '')
       .trim();
+
+    // Preserve '?' and '=' in YouTube filenames ('watch?v=')
+    const isYoutubePath = path.includes('watch?v=') || path.includes('watch%3Fv%3D');
+    if (isYoutubePath) {
+      // For YouTube paths, only strip query params that follow the extension (e.g., .mp4?token=...)
+      return path.replace(/(\.(mp4|mkv|mp3|m4a|webm|vtt|srt|jpg|png))\?.*$/i, '$1');
+    }
+    
+    // For other paths, strip standard query parameters
+    return path.split('?')[0];
   }
 
   private withTokenQuery(url: string, token: string): string {
