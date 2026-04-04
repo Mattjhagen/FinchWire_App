@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — FinchWire</title>
+  <meta name="description" content="FinchWire Privacy Policy — how we collect, use, and protect your data." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:    #4F8EF7;
+      --bg:       #0A0E1A;
+      --surface:  #111827;
+      --text:     #F9FAFB;
+      --muted:    #9CA3AF;
+      --border:   rgba(255,255,255,0.08);
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 2rem;
+      background: rgba(10,14,26,0.9);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      font-size: 1.2rem; font-weight: 800;
+      background: linear-gradient(135deg, var(--brand), #7C3AED);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      text-decoration: none;
+    }
+    nav a.back { color: var(--muted); text-decoration: none; font-size: 0.875rem; }
+    nav a.back:hover { color: var(--text); }
+
+    .container {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 4rem 1.5rem 6rem;
+    }
+
+    .page-title {
+      font-size: clamp(1.8rem, 4vw, 2.6rem);
+      font-weight: 800; letter-spacing: -0.75px;
+      margin-bottom: 0.5rem;
+    }
+    .last-updated {
+      color: var(--muted); font-size: 0.875rem;
+      margin-bottom: 3rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h2 {
+      font-size: 1.2rem; font-weight: 700;
+      margin: 2.5rem 0 0.75rem;
+      color: var(--text);
+    }
+    h3 {
+      font-size: 1rem; font-weight: 600;
+      margin: 1.5rem 0 0.5rem;
+      color: var(--text);
+    }
+    p { color: var(--muted); margin-bottom: 1rem; font-size: 0.95rem; }
+    ul { margin: 0.5rem 0 1rem 1.5rem; }
+    li { color: var(--muted); font-size: 0.95rem; margin-bottom: 0.4rem; }
+
+    .highlight-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--brand);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin: 1.5rem 0;
+    }
+    .highlight-box p { margin: 0; }
+
+    a { color: var(--brand); }
+    a:hover { text-decoration: underline; }
+
+    footer {
+      text-align: center;
+      padding: 2rem 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted); font-size: 0.85rem;
+    }
+    footer a { color: var(--muted); }
+    footer a:hover { color: var(--text); }
+
+    @media (max-width: 640px) {
+      nav { padding: 1rem; }
+      .container { padding: 2.5rem 1rem 4rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">FinchWire</a>
+  <a href="/" class="back">&#x2190; Back to Home</a>
+</nav>
+
+<div class="container">
+
+  <h1 class="page-title">Privacy Policy</h1>
+  <p class="last-updated">Last updated: April 4, 2025</p>
+
+  <div class="highlight-box">
+    <p>FinchWire is built with your privacy in mind. We do not sell your data, show you ads, or share your personal information with third parties for marketing purposes. This policy explains what data we collect and why.</p>
+  </div>
+
+  <!-- 1 -->
+  <h2>1. Who We Are</h2>
+  <p>FinchWire ("we," "our," or "us") is the developer and operator of the FinchWire mobile application and the website at <a href="https://finchwire.site">finchwire.site</a>. For questions about this policy, contact us at <a href="mailto:privacy@finchwire.site">privacy@finchwire.site</a>.</p>
+
+  <!-- 2 -->
+  <h2>2. Information We Collect</h2>
+
+  <h3>2.1 Account Information</h3>
+  <p>When you create an account, we collect:</p>
+  <ul>
+    <li>Username and password (stored hashed — we never see your plaintext password)</li>
+    <li>Session tokens used to authenticate your device</li>
+  </ul>
+
+  <h3>2.2 App Usage & Preferences</h3>
+  <p>To personalize your experience, the app stores locally and optionally on your self-hosted or our hosted backend:</p>
+  <ul>
+    <li>Content preferences (topics followed, sources muted, stories marked as interesting or not)</li>
+    <li>Creator watchlists (YouTube channel IDs you choose to monitor)</li>
+    <li>Download queue history and media files (stored on your device)</li>
+    <li>Home dashboard tile configuration</li>
+    <li>Notification preferences (quiet hours, caps, alert types)</li>
+    <li>Article dwell time (time spent reading, used only to improve your personal recommendations — never shared)</li>
+  </ul>
+
+  <h3>2.3 Device & Push Notifications</h3>
+  <p>If you enable push notifications, we collect an Expo push token associated with your device. This token is used solely to deliver notifications you have requested (creator alerts, breaking news) and is not shared with third parties.</p>
+
+  <h3>2.4 Optional AI Provider Keys</h3>
+  <p>If you configure a third-party AI provider (e.g., OpenAI, Google Gemini, Anthropic, xAI, Groq), you supply your own API key. These keys are stored in your device's secure storage and are transmitted only to the respective provider when you initiate an AI search. We do not store or log these keys on our servers.</p>
+
+  <h3>2.5 Media URLs</h3>
+  <p>URLs you submit for download are processed by the backend to retrieve the media file. We do not log or store submitted URLs beyond what is needed to complete the download job.</p>
+
+  <h3>2.6 Information We Do Not Collect</h3>
+  <ul>
+    <li>We do not collect your real name, email address, phone number, or payment information.</li>
+    <li>We do not use advertising SDKs or analytics platforms (no Firebase Analytics, no Facebook SDK, etc.).</li>
+    <li>We do not access your contacts, camera, microphone, or location.</li>
+    <li>We do not build advertising profiles or sell data to data brokers.</li>
+  </ul>
+
+  <!-- 3 -->
+  <h2>3. How We Use Your Information</h2>
+  <ul>
+    <li><strong>To provide the service:</strong> authenticate your account, process downloads, deliver notifications, and display personalized feeds.</li>
+    <li><strong>To improve personalization:</strong> rank news stories based on your engagement signals using a deterministic, on-device algorithm.</li>
+    <li><strong>To send alerts:</strong> notify you of creator events (live streams, uploads) and trending stories you have opted into.</li>
+    <li><strong>To operate the app:</strong> maintain session security, debug errors, and improve reliability.</li>
+  </ul>
+  <p>We do not use your data for advertising, profiling for sale, or any purpose not listed above.</p>
+
+  <!-- 4 -->
+  <h2>4. Third-Party Services</h2>
+  <p>FinchWire integrates with the following third-party services. Your interactions with these services are subject to their own privacy policies:</p>
+  <ul>
+    <li><strong>YouTube Data API (Google LLC)</strong> — used to monitor channels you follow for live streams and uploads. <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a></li>
+    <li><strong>Open-Meteo / WeatherAPI</strong> — used to fetch weather data for your home dashboard. No personally identifiable information is sent; only a coarse location if you configure one.</li>
+    <li><strong>CoinGecko / Yahoo Finance</strong> — used to fetch market price data. No user data is sent.</li>
+    <li><strong>OurManna</strong> — used to fetch the Verse of the Day. No user data is sent.</li>
+    <li><strong>Expo (Expo Go / EAS)</strong> — used for app delivery and push notification infrastructure. <a href="https://expo.dev/privacy" target="_blank" rel="noopener">Expo Privacy Policy</a></li>
+    <li><strong>AI Providers (optional)</strong> — if you configure an AI search provider (OpenAI, Google Gemini, Anthropic, xAI, Groq), your search queries are sent directly to that provider using your own API key. We do not proxy or log these requests.</li>
+  </ul>
+
+  <!-- 5 -->
+  <h2>5. Data Storage & Security</h2>
+  <p>
+    Your media files and downloaded content are stored locally on your device. Preferences and account data are stored on the backend server (self-hosted by you, or on our hosted infrastructure). We use JWT-based authentication with short-lived tokens to protect your account.
+  </p>
+  <p>
+    Sensitive data such as your PIN and any API keys are stored in your device's encrypted secure storage (expo-secure-store), not in plain text or in cloud backups.
+  </p>
+  <p>
+    We implement reasonable technical and organizational measures to protect your data from unauthorized access, loss, or disclosure. However, no system is 100% secure; please use a strong password and enable app lock for sensitive use cases.
+  </p>
+
+  <!-- 6 -->
+  <h2>6. Self-Hosted Backend</h2>
+  <p>
+    FinchWire supports a fully self-hosted backend. If you choose to run your own backend instance, all data associated with your account is stored entirely on your infrastructure. In that case, this policy applies only to the FinchWire app itself (client-side behavior) and not to any backend you control.
+  </p>
+
+  <!-- 7 -->
+  <h2>7. Data Retention</h2>
+  <p>
+    We retain your account data for as long as your account is active. If you delete your account, your data is removed from our servers within 30 days. Media files stored on your device are managed by you and can be deleted at any time from within the app.
+  </p>
+
+  <!-- 8 -->
+  <h2>8. Children's Privacy</h2>
+  <p>
+    FinchWire is not directed at children under the age of 13. We do not knowingly collect personal information from children under 13. If you believe a child under 13 has provided us with personal information, please contact us and we will delete it promptly.
+  </p>
+
+  <!-- 9 -->
+  <h2>9. Your Rights</h2>
+  <p>Depending on your location, you may have the right to:</p>
+  <ul>
+    <li>Access the personal data we hold about you</li>
+    <li>Request correction of inaccurate data</li>
+    <li>Request deletion of your account and associated data</li>
+    <li>Withdraw consent for push notifications at any time (via device settings)</li>
+    <li>Export your preferences and watchlists</li>
+  </ul>
+  <p>To exercise any of these rights, contact us at <a href="mailto:privacy@finchwire.site">privacy@finchwire.site</a>.</p>
+
+  <!-- 10 -->
+  <h2>10. Changes to This Policy</h2>
+  <p>
+    We may update this Privacy Policy from time to time. When we do, we will update the "Last updated" date at the top of this page and, for significant changes, notify you within the app. Continued use of FinchWire after changes constitutes your acceptance of the updated policy.
+  </p>
+
+  <!-- 11 -->
+  <h2>11. Contact Us</h2>
+  <p>
+    If you have questions, concerns, or requests related to this Privacy Policy or your data, please reach out:
+  </p>
+  <ul>
+    <li>Email: <a href="mailto:privacy@finchwire.site">privacy@finchwire.site</a></li>
+    <li>Website: <a href="https://finchwire.site">finchwire.site</a></li>
+  </ul>
+
+</div>
+
+<footer>
+  <p>&copy; 2025 FinchWire &nbsp;|&nbsp; <a href="/">Home</a> &nbsp;|&nbsp; <a href="mailto:privacy@finchwire.site">Contact</a></p>
+</footer>
+
+</body>
+</html>

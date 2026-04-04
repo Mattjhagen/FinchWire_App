@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FinchWire — Your Personal Media & Intelligence Hub</title>
+  <meta name="description" content="FinchWire: Download media, get personalized news, monitor your favorite creators, and stay informed — all in one app." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:      #4F8EF7;
+      --brand-dark: #2563EB;
+      --accent:     #7C3AED;
+      --bg:         #0A0E1A;
+      --surface:    #111827;
+      --surface2:   #1F2937;
+      --text:       #F9FAFB;
+      --muted:      #9CA3AF;
+      --border:     rgba(255,255,255,0.08);
+      --radius:     14px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 2rem;
+      background: rgba(10,14,26,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      font-size: 1.25rem; font-weight: 800;
+      background: linear-gradient(135deg, var(--brand), var(--accent));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+    .nav-links { display: flex; gap: 2rem; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      background: var(--brand); color: #fff;
+      padding: 0.5rem 1.2rem; border-radius: 8px;
+      text-decoration: none; font-size: 0.875rem; font-weight: 600;
+      transition: background 0.2s;
+    }
+    .nav-cta:hover { background: var(--brand-dark); }
+
+    /* ── Hero ── */
+    .hero {
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center;
+      padding: 6rem 1.5rem 5rem;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(79,142,247,0.15) 0%, transparent 70%);
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: rgba(79,142,247,0.12); border: 1px solid rgba(79,142,247,0.3);
+      color: var(--brand); font-size: 0.8rem; font-weight: 600;
+      padding: 0.35rem 1rem; border-radius: 999px; margin-bottom: 1.5rem;
+      letter-spacing: 0.5px; text-transform: uppercase;
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.8rem);
+      font-weight: 800; line-height: 1.15;
+      letter-spacing: -1.5px;
+      max-width: 750px; margin-bottom: 1.25rem;
+    }
+    .hero h1 span {
+      background: linear-gradient(135deg, var(--brand), var(--accent));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: 1.15rem; color: var(--muted);
+      max-width: 560px; margin-bottom: 2.5rem; line-height: 1.7;
+    }
+    .hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; margin-bottom: 1rem; }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: linear-gradient(135deg, var(--brand), var(--accent));
+      color: #fff; padding: 0.85rem 1.8rem;
+      border-radius: 10px; font-size: 1rem; font-weight: 600;
+      text-decoration: none; transition: opacity 0.2s, transform 0.2s;
+      box-shadow: 0 4px 24px rgba(79,142,247,0.35);
+    }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: var(--surface2); color: var(--text);
+      padding: 0.85rem 1.8rem; border-radius: 10px;
+      font-size: 1rem; font-weight: 600;
+      text-decoration: none; border: 1px solid var(--border);
+      transition: background 0.2s;
+    }
+    .btn-secondary:hover { background: #374151; }
+    .btn-disabled {
+      opacity: 0.5; cursor: not-allowed; pointer-events: none;
+    }
+    .soon-note { font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem; }
+
+    /* ── Feature grid ── */
+    section { padding: 5rem 1.5rem; }
+    .section-label {
+      text-align: center; color: var(--brand);
+      font-size: 0.8rem; font-weight: 700;
+      letter-spacing: 2px; text-transform: uppercase;
+      margin-bottom: 0.75rem;
+    }
+    h2 {
+      text-align: center; font-size: clamp(1.6rem, 3vw, 2.4rem);
+      font-weight: 800; letter-spacing: -0.75px;
+      margin-bottom: 1rem;
+    }
+    .section-sub {
+      text-align: center; color: var(--muted);
+      max-width: 520px; margin: 0 auto 3.5rem;
+      font-size: 1rem;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem; max-width: 1100px; margin: 0 auto;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .feature-card:hover { border-color: rgba(79,142,247,0.4); transform: translateY(-2px); }
+    .feature-icon {
+      font-size: 2rem; margin-bottom: 1rem;
+      width: 52px; height: 52px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(79,142,247,0.1); border-radius: 12px;
+    }
+    .feature-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .feature-card p { font-size: 0.9rem; color: var(--muted); line-height: 1.6; }
+
+    /* ── How it works ── */
+    .steps-section { background: var(--surface); }
+    .steps { display: flex; flex-direction: column; gap: 2rem; max-width: 700px; margin: 0 auto; }
+    .step { display: flex; gap: 1.5rem; align-items: flex-start; }
+    .step-num {
+      flex-shrink: 0;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--brand), var(--accent));
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 0.9rem;
+    }
+    .step-content h3 { font-size: 1rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .step-content p { font-size: 0.9rem; color: var(--muted); }
+
+    /* ── Tiles showcase ── */
+    .tiles-row {
+      display: flex; flex-wrap: wrap; gap: 1rem;
+      justify-content: center; max-width: 900px; margin: 0 auto;
+    }
+    .tile {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.2rem 1.5rem;
+      display: flex; align-items: center; gap: 0.75rem;
+      min-width: 180px;
+    }
+    .tile-icon { font-size: 1.5rem; }
+    .tile-label { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+    .tile-value { font-size: 1rem; font-weight: 700; }
+
+    /* ── Download CTA ── */
+    .download-section {
+      text-align: center;
+      background: radial-gradient(ellipse 80% 60% at 50% 100%, rgba(124,58,237,0.18) 0%, transparent 70%);
+    }
+    .download-badges { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; margin-top: 2rem; }
+    .badge-btn {
+      display: inline-flex; align-items: center; gap: 0.75rem;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 0.85rem 1.6rem;
+      border-radius: 10px; text-decoration: none;
+      font-weight: 600; font-size: 0.9rem;
+      transition: background 0.2s;
+    }
+    .badge-btn:hover { background: #374151; }
+    .badge-btn.coming { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+    .badge-icon { font-size: 1.5rem; }
+    .badge-sub { font-size: 0.7rem; font-weight: 400; color: var(--muted); display: block; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2rem 1.5rem;
+      display: flex; flex-wrap: wrap; gap: 1rem;
+      align-items: center; justify-content: space-between;
+      font-size: 0.85rem; color: var(--muted);
+      max-width: 1100px; margin: 0 auto;
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+    .footer-links { display: flex; gap: 1.5rem; }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      nav { padding: 1rem; }
+      .nav-links { display: none; }
+      .hero { padding: 4rem 1rem 3.5rem; }
+      footer { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Navigation ── -->
+<nav>
+  <div class="nav-logo">FinchWire</div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#how-it-works">How It Works</a>
+    <a href="#download">Download</a>
+    <a href="/privacy">Privacy</a>
+  </div>
+  <a href="#download" class="nav-cta">Get the App</a>
+</nav>
+
+<!-- ── Hero ── -->
+<section class="hero">
+  <div class="hero-badge">&#x2728; Now on Google Play</div>
+  <h1>Your Personal <span>Media & Intelligence</span> Hub</h1>
+  <p>
+    Download anything, follow your favorite creators, get personalized news ranked by what matters to you — all in one clean, fast app.
+  </p>
+  <div class="hero-actions">
+    <a href="#download" class="btn-primary">&#x2193; Download FinchWire</a>
+    <a href="#features" class="btn-secondary">See Features</a>
+  </div>
+  <p class="soon-note">Available on Android &nbsp;&#x2022;&nbsp; iOS coming soon</p>
+</section>
+
+<!-- ── Features ── -->
+<section id="features">
+  <p class="section-label">Features</p>
+  <h2>Everything in one place</h2>
+  <p class="section-sub">Six powerful capabilities, one lightweight app.</p>
+
+  <div class="features-grid">
+
+    <div class="feature-card">
+      <div class="feature-icon">&#x23EC;</div>
+      <h3>Download & Play Offline</h3>
+      <p>Queue any video or audio URL for background downloading. Full in-app player with scrubbing, background audio, Picture-in-Picture, and resume — no subscription required.</p>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F4F0;</div>
+      <h3>Personalized News Feed</h3>
+      <p>Stories ranked by trending velocity, popularity, and your interests — not a black-box algorithm. Follow topics, mute sources, and teach FinchWire what you care about.</p>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F514;</div>
+      <h3>Creator Alerts</h3>
+      <p>Get notified the moment your favorite YouTube channels go live, upload new videos, or schedule streams. Per-creator controls, quiet hours, and daily notification caps.</p>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F3E0;</div>
+      <h3>Smart Home Dashboard</h3>
+      <p>Glanceable smart tiles for live weather, stock & crypto prices, your download queue status, and top stories — all configurable and reorderable from one screen.</p>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F4FA;</div>
+      <h3>Live TV</h3>
+      <p>A curated channel guide with live YouTube stream embeds, Pluto-style. Browse channels, tap to watch, and pick up where you left off with persistent channel memory.</p>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F512;</div>
+      <h3>Private & Secure</h3>
+      <p>Optional biometric + PIN app lock, JWT-based auth, and a self-hostable backend so your data stays under your control. No ads, no tracking.</p>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── Smart Dashboard Tiles ── -->
+<section style="padding-top: 0;">
+  <p class="section-label">Home Dashboard</p>
+  <h2>Your world at a glance</h2>
+  <p class="section-sub">Configure the tiles that matter to you and rearrange them however you like.</p>
+  <div class="tiles-row">
+    <div class="tile">
+      <span class="tile-icon">&#x1F324;&#xFE0F;</span>
+      <div>
+        <div class="tile-label">Weather</div>
+        <div class="tile-value">72° Partly Cloudy</div>
+      </div>
+    </div>
+    <div class="tile">
+      <span class="tile-icon">&#x1F4C8;</span>
+      <div>
+        <div class="tile-label">Markets</div>
+        <div class="tile-value">BTC $68,420</div>
+      </div>
+    </div>
+    <div class="tile">
+      <span class="tile-icon">&#x23F3;</span>
+      <div>
+        <div class="tile-label">Download Queue</div>
+        <div class="tile-value">2 active</div>
+      </div>
+    </div>
+    <div class="tile">
+      <span class="tile-icon">&#x1F4D6;</span>
+      <div>
+        <div class="tile-label">Verse of the Day</div>
+        <div class="tile-value">Daily inspiration</div>
+      </div>
+    </div>
+    <div class="tile">
+      <span class="tile-icon">&#x1F525;</span>
+      <div>
+        <div class="tile-label">Trending Now</div>
+        <div class="tile-value">For You feed</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── How It Works ── -->
+<section id="how-it-works" class="steps-section">
+  <p class="section-label">How It Works</p>
+  <h2>Up and running in minutes</h2>
+  <p class="section-sub">No complicated setup. Just download, connect, and go.</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <h3>Download FinchWire</h3>
+        <p>Install from Google Play on any Android device. iOS coming soon.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <h3>Create your account</h3>
+        <p>Sign in and configure your backend — or use the default hosted option to get started instantly.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <h3>Add media &amp; follow creators</h3>
+        <p>Paste any video URL to queue a download. Search for YouTube channels to watch and get notified.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <h3>Personalize your feed</h3>
+        <p>Follow topics, mute sources, mark stories as interesting — FinchWire learns what matters to you over time.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-content">
+        <h3>Stay informed, offline-ready</h3>
+        <p>Your downloads live on-device. News caches for offline reading. Everything works even when you're off the grid.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Download CTA ── -->
+<section id="download" class="download-section">
+  <p class="section-label">Download</p>
+  <h2>Get FinchWire</h2>
+  <p class="section-sub">Free to download. Your media, your feed, your rules.</p>
+
+  <div class="download-badges">
+    <!-- Replace href with real Play Store URL when live -->
+    <a href="#" class="badge-btn">
+      <span class="badge-icon">&#x1F916;</span>
+      <span>
+        <span class="badge-sub">Get it on</span>
+        Google Play
+      </span>
+    </a>
+
+    <a href="#" class="badge-btn coming">
+      <span class="badge-icon">&#xF8FF;</span>
+      <span>
+        <span class="badge-sub">Coming soon</span>
+        App Store
+      </span>
+    </a>
+  </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer>
+  <div>&copy; 2025 FinchWire. All rights reserved.</div>
+  <div class="footer-links">
+    <a href="/privacy">Privacy Policy</a>
+    <a href="mailto:support@finchwire.site">Contact</a>
+  </div>
+</footer>
+
+</body>
+</html>
