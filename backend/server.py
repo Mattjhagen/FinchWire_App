@@ -192,8 +192,8 @@ def _build_media_url(base_url: str, path: str, token: str) -> str:
 
 
 def _default_settings() -> Dict[str, Any]:
-    ai_provider = os.environ.get("FINCHWIRE_AI_PROVIDER", "none")
-    tts_provider = os.environ.get("FINCHWIRE_TTS_PROVIDER", "none")
+    ai_provider = os.environ.get("FINCHWIRE_AI_PROVIDER", "gemini")
+    tts_provider = os.environ.get("FINCHWIRE_TTS_PROVIDER", "gemini")
     return {
         "ai_provider": ai_provider,
         "tts_provider": tts_provider,
@@ -223,6 +223,15 @@ def _settings_state() -> Dict[str, Any]:
         store.replace_collection("settings", settings)
     for key, value in _default_settings().items():
         settings.setdefault(key, value)
+    
+    # Auto-heal: If an AI provider environment variable is present but state is 'none', update state.
+    if settings.get("ai_provider") == "none":
+        env_provider = os.environ.get("FINCHWIRE_AI_PROVIDER")
+        if env_provider and env_provider != "none":
+            settings["ai_provider"] = env_provider
+        elif os.environ.get("GEMINI_API_KEY") or os.environ.get("FINCHWIRE_GEMINI_MODEL"):
+            settings["ai_provider"] = "gemini"
+
     return settings
 
 

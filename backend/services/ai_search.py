@@ -156,9 +156,9 @@ def _run_gemini(prompt: str, api_key: str, audio_base64: str | None = None, audi
     # Prioritize reliable latest model strings. 
     # v1 is standard for Flash 1.5; v1beta is for experimental/multimodal features.
     models_to_try = [configured_model] if configured_model else [
+        "gemini-3.1-flash-lite-preview",
         "gemini-1.5-flash-latest", 
         "gemini-1.5-flash",
-        "gemini-1.5-pro-latest"
     ]
     
     last_exc = None
