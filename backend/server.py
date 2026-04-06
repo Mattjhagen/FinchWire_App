@@ -925,6 +925,37 @@ async def ai_speech(payload: AiSpeechRequest, user: str = Depends(get_current_us
     }
 
 
+@api_router.get("/stories/{story_id}/insight")
+async def get_story_insight(story_id: str, user: str = Depends(get_current_user)):
+    stories = _collection("stories")
+    story = next((s for s in stories if s.get("id") == story_id), None)
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    settings = _settings_state()
+    provider = _normalized_ai_provider(settings.get("ai_provider", "none"))
+    api_key = _resolve_ai_api_key(provider, settings)
+
+    if not api_key or provider == "none":
+        return {"answer": "I would love to give you my thoughts, but you haven't given me an AI key yet. Typical."}
+
+    # Generate a sassy TL;DR
+    prompt = (
+        f"Give me a sassy, opinionated 1-sentence insight about this news story:\n"
+        f"Title: {story.get('title')}\n"
+        f"Source: {story.get('source')}\n"
+        f"Summary: {story.get('summary')[:300]}"
+    )
+    
+    try:
+        from services.ai_search import run_ai_search
+        res = run_ai_search(prompt, provider, api_key)
+        return {"answer": res.answer}
+    except Exception as e:
+        logger.error(f"Story insight failed: {e}")
+        return {"answer": "I'm too busy being fabulous to read this right now. Try again later."}
+
+
 @api_router.get("/home/weather")
 async def get_home_weather(unit: str = Query("f"), user: str = Depends(get_current_user)):
     normalized_unit = str(unit or "f").strip().lower()

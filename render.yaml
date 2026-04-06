@@ -2,6 +2,8 @@ services:
   - type: web
     name: finchwire-app
     env: docker
+    dockerContext: backend
+    dockerfilePath: Dockerfile
     plan: free # Note: free tier does not support persistent disks. For persistent state, upgrade to Starter.
     envVars:
       - key: FINCHWIRE_STATE_FILE
@@ -13,17 +15,8 @@ services:
       - key: FINCHWIRE_SECRET_KEY
         generateValue: true
       - key: YT_DOWNLOAD_URL
+        # This points to the sibling microservice or localhost if merged
         value: http://localhost:3000
-      # AI API Keys (Optional, can be set in Render dashboard)
-      # - key: GEMINI_API_KEY
-      #   sync: false
-      # - key: OPENAI_API_KEY
-      #   sync: false
-      # - key: GOOGLE_API_KEY
-      #   sync: false
-    # If using Starter plan, add disk:
-    # disk:
-    #   name: finchwire-data
-    #   mountPath: /data
-    #   sizeGB: 1
+      - key: FINCHWIRE_PUBLIC_BASE_URL
+        value: https://finchwire-app.onrender.com
     healthCheckPath: /api/health

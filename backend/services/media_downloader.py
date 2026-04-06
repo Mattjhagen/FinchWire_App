@@ -23,24 +23,26 @@ def run_download_job(job: Dict[str, Any], media_dir: Path) -> Dict[str, Any]:
     
     # Prepare output template
     ext = "mp3" if is_audio else "mp4"
+    # For Render/Serverless: If it's a YouTube URL, we can just use the embed link
+    if "youtube.com" in url or "youtu.be" in url:
+        try:
+            # Extract ID using yt-dlp quickly
+            meta_cmd = ["yt-dlp", "--get-id", url]
+            res = subprocess.check_output(meta_cmd, stderr=subprocess.STDOUT, text=True).strip()
+            if res:
+                job["status"] = "completed"
+                job["progress"] = 100
+                job["kind"] = "embed"
+                job["relative_path"] = f"https://www.youtube.com/embed/{res}"
+                job["filename"] = res
+                job["file_size"] = 0
+                logger.info(f"Using embed for YouTube URL: {res}")
+                return job
+        except Exception as e:
+            logger.warning(f"Failed to get YouTube ID for embed fallback: {e}")
+
+    # Standard download logic follows...
     output_tpl = str(media_dir / f"{safe_name}.%(ext)s")
-    
-    # Build yt-dlp command
-    cmd = [
-        "yt-dlp",
-        "--no-playlist",
-        "--newline",
-        "--progress",
-    ]
-    
-    if is_audio:
-        cmd += ["-x", "--audio-format", "mp3"]
-    else:
-        # Standard 720p or lower for mobile efficiency
-        cmd += ["-f", "bestvideo[height<=720]+bestaudio/best[height<=720]/best"]
-        cmd += ["--merge-output-format", "mp4"]
-        
-    cmd += ["-o", output_tpl, url]
     
     logger.info(f"Starting download for {url} (is_audio={is_audio})")
     job["status"] = "downloading"
