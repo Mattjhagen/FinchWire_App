@@ -734,6 +734,27 @@ async def cors_proxy(url: str = Query(...)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.get("/")
+async def serve_root(request: Request):
+    host = request.headers.get("host", "").lower()
+    frontend_index = Path(FRONTEND_DIST) / "index.html"
+    website_index = Path(WEBSITE_DIR) / "index.html"
+
+    # yt. subdomain -> App Dashboard
+    if host.startswith("yt.") and frontend_index.exists():
+        return FileResponse(str(frontend_index))
+    
+    # Otherwise -> Website Landing Page
+    if website_index.exists():
+        return FileResponse(str(website_index))
+    
+    # Absolute Fallback
+    if frontend_index.exists():
+        return FileResponse(str(frontend_index))
+    
+    return {"message": "FinchWire server is running."}
+
+
 @api_router.post("/login", response_model=AuthResponse)
 async def login(req: LoginRequest):
     users = _users()
