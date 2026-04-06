@@ -23,6 +23,7 @@ import {
   TemperatureUnit,
   TtsProvider,
   VerseOfDay,
+  DevotionalResponse,
   WeatherSnapshot,
   WeatherProvider,
   MarketProvider,
@@ -379,6 +380,10 @@ class ApiService {
   async getVerseOfDay(): Promise<VerseOfDay> {
     const response = await this.request<HomeVerseResponse>(API_ENDPOINTS.HOME_VERSE);
     return response.verse;
+  }
+
+  async getDevotional(): Promise<DevotionalResponse> {
+    return this.request<DevotionalResponse>('/home/devotional');
   }
 
   async sendFeedInteraction(payload: FeedInteractionEvent): Promise<{ success: boolean }> {

@@ -3,6 +3,7 @@ import {
   Alert,
   type AlertButton,
   Linking,
+  LayoutAnimation,
   Platform,
   RefreshControl,
   ScrollView,
@@ -171,6 +172,13 @@ const buildReasonText = (
 export default function HomeScreen() {
   const router = useRouter();
   const { settings, saveSettings } = useSettingsStore();
+
+  const [expandedTile, setExpandedTile] = useState<string | null>(null);
+
+  const toggleExpand = (tile: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedTile(expandedTile === tile ? null : tile);
+  };
 
   const [prompt, setPrompt] = useState('');
   const [feedFilter, setFeedFilter] = useState('');
@@ -715,9 +723,16 @@ export default function HomeScreen() {
         <View style={styles.tileGrid}>
           {homeSettings.tilePrefs.order.map((tileType) => {
             if (!homeSettings.tilePrefs[tileType]) return null;
+            const isExpanded = expandedTile === tileType;
+            
             if (tileType === 'weather') {
               return (
-                <View key={tileType} style={styles.tileCard}>
+                <TouchableOpacity 
+                  key={tileType} 
+                  style={[styles.tileCard, isExpanded && styles.tileCardExpanded]}
+                  onPress={() => toggleExpand('weather')}
+                  activeOpacity={0.9}
+                >
                   <TileHeader title={HOME_TILE_LABELS.weather} icon="partly-sunny-outline" onToggle={() => toggleTile('weather')} />
                   {isWeatherLoading ? <TileLoading /> : null}
                   {!isWeatherLoading && weatherError ? (
@@ -733,17 +748,22 @@ export default function HomeScreen() {
                       <Text style={styles.tileSecondary}>
                         {weatherSnapshot.condition || 'Unknown'} • {weatherSnapshot.locationLabel || 'Local'}
                       </Text>
-                      <Text style={styles.tileMeta}>
-                        H {homeSettings.weatherUnit === 'f'
-                          ? `${Math.round(Number(weatherSnapshot.highF || 0))}°`
-                          : `${Math.round(Number(weatherSnapshot.highC || 0))}°`}
-                        {' '}• L {homeSettings.weatherUnit === 'f'
-                          ? `${Math.round(Number(weatherSnapshot.lowF || 0))}°`
-                          : `${Math.round(Number(weatherSnapshot.lowC || 0))}°`}
-                      </Text>
+                      {isExpanded && (
+                        <View style={styles.expandedContent}>
+                          <Text style={styles.expandedText}>
+                            High: {homeSettings.weatherUnit === 'f' ? `${Math.round(Number(weatherSnapshot.highF || 0))}°F` : `${Math.round(Number(weatherSnapshot.highC || 0))}°C`}
+                          </Text>
+                          <Text style={styles.expandedText}>
+                            Low: {homeSettings.weatherUnit === 'f' ? `${Math.round(Number(weatherSnapshot.lowF || 0))}°F` : `${Math.round(Number(weatherSnapshot.lowC || 0))}°C`}
+                          </Text>
+                          <Text style={styles.expandedText}>
+                            Observed at: {weatherSnapshot.observedAt || 'N/A'}
+                          </Text>
+                        </View>
+                      )}
                     </>
                   ) : null}
-                </View>
+                </TouchableOpacity>
               );
             }
 
@@ -751,7 +771,12 @@ export default function HomeScreen() {
               const change = Number(marketQuote?.changePercent24h || 0);
               const isUp = change >= 0;
               return (
-                <View key={tileType} style={styles.tileCard}>
+                <TouchableOpacity 
+                  key={tileType} 
+                  style={[styles.tileCard, isExpanded && styles.tileCardExpanded]}
+                  onPress={() => toggleExpand('market')}
+                  activeOpacity={0.9}
+                >
                   <TileHeader title={HOME_TILE_LABELS.market} icon="trending-up-outline" onToggle={() => toggleTile('market')} />
                   {isMarketLoading ? <TileLoading /> : null}
                   {!isMarketLoading && marketError ? (
@@ -765,27 +790,47 @@ export default function HomeScreen() {
                       <Text style={[styles.tileSecondary, { color: isUp ? colors.success : colors.error }]}>
                         {isUp ? '▲' : '▼'} {Math.abs(change).toFixed(2)}%
                       </Text>
-                      <TouchableOpacity style={styles.tileInlineButton} onPress={chooseTicker}>
-                        <Text style={styles.tileInlineButtonText}>Change Asset</Text>
-                      </TouchableOpacity>
+                      {isExpanded && (
+                        <View style={styles.expandedContent}>
+                          <Text style={styles.expandedText}>Display Name: {marketQuote.displayName}</Text>
+                          <Text style={styles.expandedText}>Asset Type: {marketQuote.assetType}</Text>
+                          <Text style={styles.expandedText}>Currency: {marketQuote.currency}</Text>
+                          <TouchableOpacity style={styles.tileInlineButton} onPress={chooseTicker}>
+                            <Text style={styles.tileInlineButtonText}>Change Asset</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </>
                   ) : null}
-                </View>
+                </TouchableOpacity>
               );
             }
 
             return (
-              <View key={tileType} style={styles.tileCard}>
+              <TouchableOpacity 
+                key={tileType} 
+                style={[styles.tileCard, isExpanded && styles.tileCardExpanded]}
+                onPress={() => toggleExpand('verse')}
+                activeOpacity={0.9}
+              >
                 <TileHeader title={HOME_TILE_LABELS.verse} icon="book-outline" onToggle={() => toggleTile('verse')} />
                 {isVerseLoading ? <TileLoading /> : null}
                 {!isVerseLoading && verseError ? <Text style={styles.tileError}>Verse unavailable</Text> : null}
                 {!isVerseLoading && !verseError && verseOfDay ? (
                   <>
-                    <Text style={styles.verseText} numberOfLines={4}>{verseOfDay.text}</Text>
+                    <Text style={styles.verseText} numberOfLines={isExpanded ? 15 : 4}>{verseOfDay.text}</Text>
                     <Text style={styles.verseRef}>{verseOfDay.reference}</Text>
+                    {isExpanded && (
+                      <TouchableOpacity 
+                        style={styles.tileInlineButton} 
+                        onPress={() => router.push('/devotional')}
+                      >
+                        <Text style={styles.tileInlineButtonText}>Read Full Devotional</Text>
+                      </TouchableOpacity>
+                    )}
                   </>
                 ) : null}
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>
@@ -805,9 +850,9 @@ export default function HomeScreen() {
               Unit: °{homeSettings.weatherUnit.toUpperCase()}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.shortcutChip} onPress={() => router.push('/(tabs)/live')}>
-            <Ionicons name="tv-outline" size={14} color={colors.textSecondary} />
-            <Text style={styles.shortcutText}>Live TV</Text>
+          <TouchableOpacity style={styles.shortcutChip} onPress={() => router.push('/devotional')}>
+            <Ionicons name="book-outline" size={14} color={colors.textSecondary} />
+            <Text style={styles.shortcutText}>Daily Word</Text>
           </TouchableOpacity>
         </View>
 
@@ -1310,6 +1355,21 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textSecondary,
     fontWeight: '700',
+  },
+  tileCardExpanded: {
+    width: '100%',
+    minHeight: 200,
+  },
+  expandedContent: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  expandedText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: 4,
   },
   infoCards: {
     flexDirection: 'row',

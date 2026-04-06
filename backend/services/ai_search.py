@@ -153,13 +153,20 @@ def _run_openai_compatible(
 
 def _run_gemini(prompt: str, api_key: str, audio_base64: str | None = None, audio_mime: str | None = None) -> AiSearchResult:
     configured_model = os.environ.get("FINCHWIRE_GEMINI_MODEL", "").strip()
-    # Prioritize 'gemini-1.5-flash' which is the current robust standard
-    models_to_try = [configured_model] if configured_model else ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-flash-latest"]
+    # Prioritize reliable latest model strings
+    models_to_try = [configured_model] if configured_model else [
+        "gemini-1.5-flash-latest", 
+        "gemini-1.5-flash", 
+        "gemini-1.5-pro-latest", 
+        "gemini-1.5-pro",
+        "gemini-pro"
+    ]
     
     last_exc = None
     for model in models_to_try:
         if not model: continue
         # Use v1beta (verified working for both text and multimodal)
+        # Note: Some accounts prefer v1, but v1beta supports the latest flash models.
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         
         parts = []

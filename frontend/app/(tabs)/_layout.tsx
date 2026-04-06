@@ -70,11 +70,11 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="live"
+        name="devotional"
         options={{
-          title: 'Live TV',
+          title: 'Daily Word',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="tv" size={size} color={color} />
+            <Ionicons name="book" size={size} color={color} />
           ),
         }}
       />

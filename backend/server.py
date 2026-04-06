@@ -30,6 +30,7 @@ from services.home_data_providers import (
     get_verse_of_day,
     get_weather_snapshot,
 )
+from services.devotional import generate_devotional
 from services.news_pipeline import compute_story_rankings, ingest_feeds, merge_stories
 from services.notification_engine import (
     DEFAULT_NOTIFICATION_PREFERENCES,
@@ -1008,6 +1009,15 @@ async def get_home_weather(unit: str = Query("f"), user: str = Depends(get_curre
     except ProviderError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"success": True, "snapshot": snapshot.as_dict()}
+
+
+@api_router.get("/home/devotional")
+async def get_devotional(user: str = Depends(get_current_user)):
+    """Generate or retrieve the AI-powered daily devotional."""
+    settings = _settings_state()
+    provider = settings.get("ai_provider", "none")
+    api_key = _resolve_ai_api_key(provider, settings)
+    return generate_devotional(provider, api_key)
 
 
 @api_router.get("/home/market")

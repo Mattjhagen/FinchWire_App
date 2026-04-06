@@ -159,6 +159,17 @@ export interface VerseOfDay {
   fetchedAt?: string;
 }
 
+export interface DevotionalResponse {
+  reference: string;
+  text: string;
+  translation?: string;
+  context: string;
+  application: string;
+  current_events: string;
+  prayer: string;
+  generatedAt: number;
+}
+
 export interface AuthResponse {
   success: boolean;
   token?: string;
