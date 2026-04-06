@@ -2,7 +2,7 @@
 # FinchWire Render Keep-Alive Script
 
 # Replace with your actual Render URL
-URL="https://finchwire-app.onrender.com/api/health"
+URL="https://finchwire-app.onrender.com/api/ping"
 
 echo "Starting Render keep-alive pinger for $URL"
 echo "Pinging every 5 minutes. Press Ctrl+C to stop (if running in foreground)."

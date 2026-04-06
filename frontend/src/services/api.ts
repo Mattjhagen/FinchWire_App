@@ -271,6 +271,10 @@ class ApiService {
   }
 
   // Auth endpoints
+  async ping(): Promise<{ status: string }> {
+    return this.request<{ status: string }>(API_ENDPOINTS.PING);
+  }
+
   async login(password: string, username: string = 'admin'): Promise<AuthResponse> {
     const response = await this.request<AuthResponse>(API_ENDPOINTS.LOGIN, {
       method: 'POST',

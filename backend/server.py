@@ -735,6 +735,12 @@ app = FastAPI(title="FinchWire API")
 api_router = APIRouter(prefix="/api")
 
 
+@api_router.get("/ping")
+async def ping():
+    """Simple health check to wake up the server (e.g. on Render)."""
+    return {"status": "ok", "timestamp": utcnow()}
+
+
 @api_router.get("/")
 async def root():
     return {"message": "FinchWire API is running"}

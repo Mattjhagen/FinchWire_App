@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { ChannelGuide } from '../src/features/live/components/ChannelGuide';
 import { LivePlayer } from '../src/features/live/components/LivePlayer';
+import { apiService } from '../src/services/api';
 import {
   findChannelById,
   getInitialChannel,
@@ -35,6 +36,7 @@ export default function LiveTvPage() {
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
+  const [backendOk, setBackendOk] = useState(true);
 
   const selectedChannel = useMemo(
     () => findChannelById(LIVE_CHANNELS, selectedChannelId),
@@ -46,8 +48,10 @@ export default function LiveTvPage() {
 
     const loadInitial = async () => {
       try {
+        const pingPromise = apiService.ping().then(() => setBackendOk(true)).catch(() => setBackendOk(false));
         const stored = await AsyncStorage.getItem(LIVE_LAST_CHANNEL_KEY);
         if (cancelled) return;
+        await pingPromise;
 
         const initial = getInitialChannel(LIVE_CHANNELS, queryChannelId, stored);
         if (initial.queryIsInvalid && queryChannelId) {
@@ -129,6 +133,15 @@ export default function LiveTvPage() {
             <Ionicons name="arrow-back-outline" size={18} color={colors.text} />
           </TouchableOpacity>
         </View>
+
+        {!backendOk && (
+          <View style={styles.warningBanner}>
+            <Ionicons name="cloud-offline-outline" size={14} color={colors.warning} />
+            <Text style={styles.warningText}>
+              Media server unreachable. Try checking your server URL in Settings if channels fail to load.
+            </Text>
+          </View>
+        )}
 
         {warning ? (
           <View style={styles.warningBanner}>

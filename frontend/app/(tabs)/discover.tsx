@@ -51,8 +51,31 @@ const compactSummary = (summary: string, fallbackTitle?: string): string => {
   return base.length > 200 ? `${base.slice(0, 197).trim()}...` : base;
 };
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const DISCOVER_CACHE_KEY = '@finchwire_discover_stories_v1';
+const DISCOVER_CACHE_TS_KEY = '@finchwire_discover_stories_ts_v1';
+
 export default function DiscoverScreen() {
   const router = useRouter();
+  const [cachedFeed, setCachedFeed] = React.useState<LiveStory[]>([]);
+  const [isHydrated, setIsHydrated] = React.useState(false);
+
+  React.useEffect(() => {
+    const loadCache = async () => {
+      try {
+        const cached = await AsyncStorage.getItem(DISCOVER_CACHE_KEY);
+        if (cached) {
+          setCachedFeed(JSON.parse(cached));
+        }
+      } catch (e) {
+        console.warn('Failed to load discover cache:', e);
+      } finally {
+        setIsHydrated(true);
+      }
+    };
+    loadCache();
+  }, []);
 
   const {
     data: feed = [],
@@ -61,10 +84,21 @@ export default function DiscoverScreen() {
     isRefetching,
   } = useQuery({
     queryKey: ['discover-feed-live-stories'],
-    queryFn: () => apiService.getLiveStories(48),
+    queryFn: async () => {
+      const data = await apiService.getLiveStories(48);
+      try {
+        await AsyncStorage.setItem(DISCOVER_CACHE_KEY, JSON.stringify(data));
+        await AsyncStorage.setItem(DISCOVER_CACHE_TS_KEY, Date.now().toString());
+      } catch (e) {
+        console.warn('Failed to save discover cache:', e);
+      }
+      return data;
+    },
     staleTime: 2 * 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
   });
+
+  const displayFeed = feed.length > 0 ? feed : cachedFeed;
 
   const {
     data: interestData,
@@ -171,7 +205,7 @@ export default function DiscoverScreen() {
         ) : null}
 
         <View style={styles.list}>
-          {feed.map((item) => (
+          {displayFeed.map((item) => (
             <StoryCard
               key={item.id}
               item={item}
@@ -188,7 +222,7 @@ export default function DiscoverScreen() {
           ))}
         </View>
 
-        {feed.length === 0 && !error ? (
+        {displayFeed.length === 0 && isHydrated && !error ? (
           <View style={styles.emptyState}>
             <Ionicons name="newspaper-outline" size={28} color={colors.textSecondary} />
             <Text style={styles.emptyTitle}>No stories yet</Text>

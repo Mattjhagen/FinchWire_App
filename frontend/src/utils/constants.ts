@@ -11,6 +11,7 @@ export const STORAGE_KEYS = {
 
 export const API_ENDPOINTS = {
   LOGIN: '/api/login',
+  PING: '/api/ping',
   LOGOUT: '/api/logout',
   SESSION: '/api/session',
   CHANGE_PASSWORD: '/api/account/password',

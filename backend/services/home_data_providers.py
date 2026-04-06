@@ -332,14 +332,26 @@ def get_market_quote(symbol: str, asset_type: str, config: Optional[Dict[str, ob
             )
             response.raise_for_status()
             payload = response.json()
-        except Exception as exc:
-            raise ProviderError(f"Crypto quote provider unavailable: {exc}") from exc
+            row = payload.get(coin_id) if isinstance(payload, dict) else None
+            if not isinstance(row, dict):
+                raise ProviderError(f"No crypto quote found for {normalized_symbol}.")
+            price = _safe_float(row.get("usd"))
+            change_pct = _safe_float(row.get("usd_24h_change"))
+        except Exception:
+            # Fallback to Coinbase spot price (no change% info)
+            try:
+                cb_res = requests.get(
+                    f"https://api.coinbase.com/v2/prices/{normalized_symbol}-USD/spot",
+                    timeout=5
+                )
+                cb_res.raise_for_status()
+                cb_payload = cb_res.json()
+                price = _safe_float(cb_payload.get("data", {}).get("amount"))
+                change_pct = 0.0
+                coin_id = normalized_symbol
+            except Exception as exc:
+                raise ProviderError(f"Market data providers exhausted for {normalized_symbol}: {exc}") from exc
 
-        row = payload.get(coin_id) if isinstance(payload, dict) else None
-        if not isinstance(row, dict):
-            raise ProviderError(f"No crypto quote found for {normalized_symbol}.")
-        price = _safe_float(row.get("usd"))
-        change_pct = _safe_float(row.get("usd_24h_change"))
         if price is None:
             raise ProviderError(f"Crypto quote for {normalized_symbol} is missing price data.")
         quote = PriceWatchItem(
