@@ -15,6 +15,9 @@ function canWriteToDirectory(targetPath) {
 }
 
 function getStorageRoot() {
+  if (process.env.FINCHWIRE_MEDIA_DIR) {
+    return process.env.FINCHWIRE_MEDIA_DIR;
+  }
   if (process.env.MEDIA_DROP_STORAGE_ROOT) {
     return process.env.MEDIA_DROP_STORAGE_ROOT;
   }
