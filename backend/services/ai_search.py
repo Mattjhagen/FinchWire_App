@@ -153,47 +153,50 @@ def _run_openai_compatible(
 
 def _run_gemini(prompt: str, api_key: str, audio_base64: str | None = None, audio_mime: str | None = None) -> AiSearchResult:
     configured_model = os.environ.get("FINCHWIRE_GEMINI_MODEL", "").strip()
-    # Prioritize reliable latest model strings
+    # Prioritize reliable latest model strings. 
+    # v1 is standard for Flash 1.5; v1beta is for experimental/multimodal features.
     models_to_try = [configured_model] if configured_model else [
         "gemini-1.5-flash-latest", 
-        "gemini-1.5-flash", 
-        "gemini-1.5-pro-latest", 
-        "gemini-1.5-pro",
-        "gemini-pro"
+        "gemini-1.5-flash",
+        "gemini-1.5-pro-latest"
     ]
     
     last_exc = None
     for model in models_to_try:
         if not model: continue
-        # Use v1beta (verified working for both text and multimodal)
-        # Note: Some accounts prefer v1, but v1beta supports the latest flash models.
-        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         
-        parts = []
-        if audio_base64 and audio_mime:
-            parts.append({"inlineData": {"mimeType": audio_mime, "data": audio_base64}})
-        
-        # Combine system instructions and prompt for robustness
-        full_prompt = f"{_PROMPT_TEMPLATE}\n\nUSER REQUEST: {str(prompt or 'Summarize this.').strip()}"
-        parts.append({"text": full_prompt})
-        
-        payload = {
-            "contents": [{"role": "user", "parts": parts}],
-            "generationConfig": {"temperature": 0.25},
-        }
-        try:
-            data = _request_json(endpoint, headers={"Content-Type": "application/json"}, payload=payload)
-            candidates = data.get("candidates")
-            if isinstance(candidates, list) and candidates:
-                parts_out = candidates[0].get("content", {}).get("parts", [])
-                text_chunks = [str(part.get("text") or "") for part in parts_out if isinstance(part, dict)]
-                return _normalize_result(prompt, "\n".join(text_chunks).strip())
-            raise AiSearchError(f"Gemini response for '{model}' missing candidates")
-        except AiSearchError as exc:
-            last_exc = exc
-            if "HTTP 404" in str(exc) or "not found" in str(exc).lower():
-                continue # Try next model
-            raise exc
+        # Try v1 first as it's the stable production endpoint for 1.5-flash
+        # We use a shorter timeout per model to avoid triggering frontend timeouts (15s)
+        for version in ["v1", "v1beta"]:
+            endpoint = f"https://generativelanguage.googleapis.com/{version}/models/{model}:generateContent?key={api_key}"
+            
+            parts = []
+            if audio_base64 and audio_mime:
+                parts.append({"inlineData": {"mimeType": audio_mime, "data": audio_base64}})
+            
+            full_prompt = f"{_PROMPT_TEMPLATE}\n\nUSER REQUEST: {str(prompt or 'Summarize this.').strip()}"
+            parts.append({"text": full_prompt})
+            
+            payload = {
+                "contents": [{"role": "user", "parts": parts}],
+                "generationConfig": {"temperature": 0.25},
+            }
+            try:
+                # Use a 10s timeout per attempt to keep total loop under 15s
+                data = _request_json(endpoint, headers={"Content-Type": "application/json"}, payload=payload, timeout=10)
+                candidates = data.get("candidates")
+                if isinstance(candidates, list) and candidates:
+                    parts_out = candidates[0].get("content", {}).get("parts", [])
+                    text_chunks = [str(part.get("text") or "") for part in parts_out if isinstance(part, dict)]
+                    return _normalize_result(prompt, "\n".join(text_chunks).strip())
+                raise AiSearchError(f"Gemini response for '{model}' missing candidates")
+            except AiSearchError as exc:
+                last_exc = exc
+                # If we get a 404, the model or version is definitely wrong, so try the next combo.
+                # If we get a timeout or 429, we might want to stop or retry once, but for brevity we skip.
+                if "HTTP 404" in str(exc) or "not found" in str(exc).lower():
+                    continue 
+                raise exc
             
     raise last_exc or AiSearchError("No Gemini models responded successfully")
 
