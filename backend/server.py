@@ -186,6 +186,7 @@ def _default_settings() -> Dict[str, Any]:
         "tts_provider": tts_provider,
         "ai_api_key": os.environ.get("GEMINI_API_KEY", ""),
         "tts_api_key": os.environ.get("GEMINI_API_KEY", ""),  # Fallback for voice too
+        "yt_download_url": os.environ.get("YT_DOWNLOAD_URL", ""),
         "weather_provider": "open_meteo",
         "market_provider": "coingecko_yahoo",
         "weather_api_key": "",
@@ -216,6 +217,7 @@ def _safe_settings_payload(settings: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "ai_provider": settings.get("ai_provider", "none"),
         "tts_provider": settings.get("tts_provider", "none"),
+        "yt_download_url": settings.get("yt_download_url", ""),
         "weather_provider": settings.get("weather_provider", "open_meteo"),
         "market_provider": settings.get("market_provider", "coingecko_yahoo"),
         "weather_location": settings.get("weather_location", "Omaha, NE"),
@@ -620,6 +622,7 @@ class UpdateServerSettingsRequest(BaseModel):
     tts_provider: Optional[str] = None
     ai_api_key: Optional[str] = None
     tts_api_key: Optional[str] = None
+    yt_download_url: Optional[str] = None
     weather_provider: Optional[str] = None
     market_provider: Optional[str] = None
     weather_api_key: Optional[str] = None
@@ -786,6 +789,8 @@ async def patch_settings(payload: UpdateServerSettingsRequest, user: str = Depen
     if payload.tts_api_key is not None:
         settings["tts_api_key"] = payload.tts_api_key.strip()
         settings["has_tts_api_key"] = bool(settings["tts_api_key"])
+    if payload.yt_download_url is not None:
+        settings["yt_download_url"] = payload.yt_download_url.strip()
     if payload.weather_provider is not None:
         settings["weather_provider"] = payload.weather_provider
     if payload.market_provider is not None:

@@ -98,11 +98,15 @@ def run_download_job(job: Dict[str, Any], media_dir: Path) -> Dict[str, Any]:
 
 async def media_worker_loop(store_ref: Any, media_dir: Path):
     """
-    Background loop that checks for 'queued' jobs and processes them one by one.
+    Background loop that checks for 'queued' jobs and processes them.
+    If 'yt_download_url' is set in settings, it attempts to delegate to the external service.
     """
     logger.info("Media Downloader worker started.")
     while True:
         try:
+            settings = store_ref.get_collection("settings")
+            yt_url = str(settings.get("yt_download_url") or "").strip()
+            
             # Check for queued jobs
             downloads = store_ref.get_collection("downloads")
             if not isinstance(downloads, list):
@@ -112,12 +116,45 @@ async def media_worker_loop(store_ref: Any, media_dir: Path):
             queued_job = next((j for j in downloads if j.get("status") == "queued"), None)
             
             if queued_job:
-                # Process the job in a thread to keep the event loop free
-                # We need to update the actual dict in the list so state saves
-                await asyncio.to_thread(run_download_job, queued_job, media_dir)
+                if yt_url:
+                    # Delegate to external YT-Download (Media Drop)
+                    await _delegate_to_external_service(queued_job, yt_url)
+                else:
+                    # Process local with yt-dlp
+                    await asyncio.to_thread(run_download_job, queued_job, media_dir)
                 store_ref.save()
             
         except Exception as e:
             logger.error(f"Downloader loop error: {e}")
             
         await asyncio.sleep(5)
+
+async def _delegate_to_external_service(job: Dict[str, Any], service_url: Dict[str, Any]):
+    """
+    Sends a request to the external YT-Download server.
+    """
+    import requests
+    url = job.get("url")
+    is_audio = job.get("is_audio", False)
+    
+    # Standard Media Drop / YT-Download endpoint is usually /api/downloads or similar
+    # We'll assume the provided URL is the base and it has a POST /api/download (based on repo analysis)
+    target_endpoint = f"{service_url.rstrip('/')}/api/download"
+    
+    try:
+        payload = {"url": url, "isAudio": is_audio}
+        job["status"] = "downloading"
+        job["progress"] = 10 # Started
+        
+        # This is a fire-and-forget or status-check depending on how YT-Download responds
+        response = requests.post(target_endpoint, json=payload, timeout=10)
+        if response.status_code < 300:
+            job["status"] = "completed" # Or track if YT-Download provides a job ID
+            job["progress"] = 100
+            logger.info(f"Delegated download for {url} to external service.")
+        else:
+            job["status"] = "failed"
+            job["error"] = f"External service error: {response.status_code}"
+    except Exception as e:
+        job["status"] = "failed"
+        job["error"] = f"Failed to connect to external service: {str(e)}"

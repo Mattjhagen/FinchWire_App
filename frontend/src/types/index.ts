@@ -62,6 +62,7 @@ export interface AppSettings {
   app_lock_timeout: AppLockTimeout;
   ai_provider: AiProvider;
   tts_provider: TtsProvider;
+  yt_download_url?: string;
   has_ai_api_key: boolean;
   has_tts_api_key: boolean;
   weather_provider: WeatherProvider;
@@ -107,6 +108,7 @@ export type TtsProvider = 'none' | 'gemini' | 'openai' | 'elevenlabs';
 export interface ServerRuntimeSettings {
   ai_provider: AiProvider;
   tts_provider: TtsProvider;
+  yt_download_url?: string;
   has_ai_api_key: boolean;
   has_tts_api_key: boolean;
   weather_provider: WeatherProvider;

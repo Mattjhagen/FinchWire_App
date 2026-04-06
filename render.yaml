@@ -12,6 +12,8 @@ services:
         generateValue: true
       - key: FINCHWIRE_SECRET_KEY
         generateValue: true
+      - key: YT_DOWNLOAD_URL
+        value: https://yt.finchwire.site
       # AI API Keys (Optional, can be set in Render dashboard)
       # - key: GEMINI_API_KEY
       #   sync: false
