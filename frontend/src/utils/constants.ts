@@ -51,4 +51,5 @@ export const JOB_STATUS = {
   FAILED: 'failed',
   EXPIRED: 'expired',
   CANCELLED: 'cancelled',
+  EMBEDDED: 'embedded',
 } as const;

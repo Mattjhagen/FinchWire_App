@@ -6,6 +6,8 @@ services:
     dockerfilePath: Dockerfile
     plan: free # Note: free tier does not support persistent disks. For persistent state, upgrade to Starter.
     envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
       - key: FINCHWIRE_STATE_FILE
         value: /data/finchwire_state.json
       - key: FINCHWIRE_MEDIA_DIR
