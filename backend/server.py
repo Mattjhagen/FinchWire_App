@@ -1537,6 +1537,34 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def host_aware_routing_middleware(request: Request, call_next):
+    """
+    🐦 FinchWire Host-Aware Routing
+    - finchwire.site (or any variant)   => /website/index.html
+    - yt.finchwire.site (or backend IP) => Dashboard / API
+    """
+    host = request.headers.get("host", "").lower()
+    path = request.url.path
+
+    # Only apply routing to GET/HEAD requests at root-level or static paths
+    # Do NOT intercept /api/ routes
+    if not path.startswith("/api/") and not path.startswith("/media/"):
+        # If the domain is exactly 'finchwire.site' or the landing page variant
+        if "finchwire.site" in host and not host.startswith("yt."):
+            # Check for static files in the website directory
+            website_file = Path(__file__).parent.parent / "website" / path.lstrip("/")
+            if website_file.is_file():
+                return FileResponse(website_file)
+            elif path == "/":
+                return FileResponse(Path(__file__).parent.parent / "website" / "index.html")
+            elif path == "/favicon.png" or path == "/favicon.ico":
+                fav_png = Path(__file__).parent.parent / "website" / "favicon.png"
+                if fav_png.exists(): return FileResponse(fav_png)
+
+    return await call_next(request)
+
+
 async def _background_alert_scheduler() -> None:
     interval_sec = max(60, int(os.environ.get("FINCHWIRE_ALERT_POLL_INTERVAL_SEC", "300")))
     while True:
