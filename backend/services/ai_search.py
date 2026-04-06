@@ -167,7 +167,7 @@ def _run_gemini(prompt: str, api_key: str, audio_base64: str | None = None, audi
         
         # Try v1 first as it's the stable production endpoint for 1.5-flash
         # We use a shorter timeout per model to avoid triggering frontend timeouts (15s)
-        for version in ["v1", "v1beta"]:
+        for version in ["v1beta", "v1"]:
             endpoint = f"https://generativelanguage.googleapis.com/{version}/models/{model}:generateContent?key={api_key}"
             
             parts = []
