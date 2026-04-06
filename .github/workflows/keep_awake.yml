@@ -1,0 +1,26 @@
+name: Render Keep-Alive
+
+on:
+  schedule:
+    # Run every 15 minutes (minimum allowed by GitHub Actions)
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render App
+        run: |
+          # Replace with your actual Render URL
+          # Using a health check endpoint is recommended
+          URL="https://finchwire-app.onrender.com/api/health"
+          echo "Pinging $URL..."
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+          if [ "$RESPONSE" == "200" ]; then
+            echo "Success: Render app is awake (Status: 200)"
+          else
+            echo "Warning: Render app might be sleeping or error (Status: $RESPONSE)"
+            # Try once more with a longer timeout to wake it
+            curl -s -m 30 "$URL" > /dev/null
+          fi
