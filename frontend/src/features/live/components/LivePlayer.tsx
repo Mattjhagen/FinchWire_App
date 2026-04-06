@@ -84,7 +84,7 @@ export function LivePlayer({ channel }: LivePlayerProps) {
         setRuntimeError('The stream reached a timeout. It may be restricted or currently offline.');
         setIsLoading(false);
       }
-    }, 15000);
+    }, 25000);
 
     return () => {
       if (loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current);
