@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinchWire</title>
+    <link rel="icon" type="image/png" href="finchwire-logo.png">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="dark-theme">
+    <div id="login-container" class="center-content">
+        <div class="card login-card">
+            <div class="brand-mark">
+                <img src="finchwire-logo.png" alt="FinchWire logo" class="brand-icon">
+                <h1>Finch<span>Wire</span></h1>
+            </div>
+            <p>Sign in to your media dashboard</p>
+            <input type="password" id="admin-password" placeholder="Admin password">
+            <button id="login-btn" class="primary-btn">Login</button>
+        </div>
+    </div>
+
+    <div id="app-container" class="hidden">
+        <nav>
+            <div class="logo-wrap">
+                <img src="finchwire-logo.png" alt="FinchWire logo" class="nav-logo">
+                <div class="logo">Finch<span>Wire</span></div>
+            </div>
+            <div class="nav-links">
+                <a href="#" class="nav-link active" data-target="dashboard-page">Dashboard</a>
+                <a href="#" class="nav-link" data-target="files-page">Library</a>
+                <a href="#" class="nav-link" data-target="discover-page">Discover</a>
+                <a href="#" class="nav-link" data-target="settings-page">Settings</a>
+            </div>
+            <button id="logout-btn" class="text-btn">Logout</button>
+        </nav>
+
+        <main>
+            <section id="dashboard-page" class="page">
+                <div class="card ai-card">
+                    <h2>Ask FinchWire AI</h2>
+                    <p class="card-subtitle">
+                        Ask for media ideas, summaries, and next-watch suggestions tuned to your usage.
+                    </p>
+                    <div class="form-group">
+                        <div class="input-stack single">
+                            <input type="text" id="ai-prompt" placeholder="Ask FinchWire AI (e.g. summarize AI regulation updates + suggest a podcast)">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <button id="ai-ask-btn" class="primary-btn">Ask AI</button>
+                    </div>
+                    <div id="ai-response" class="ai-response hidden"></div>
+                    <div id="ai-actions" class="form-row hidden">
+                        <button id="ai-queue-btn" class="primary-btn sm-btn">Queue Suggested Media</button>
+                    </div>
+                </div>
+
+                <div class="card submit-card">
+                    <h2>Fetch Video or Audio</h2>
+                    <div class="form-group">
+                        <div class="input-stack">
+                            <input type="text" id="media-url" placeholder="Paste a URL (YouTube, direct media link, etc.)">
+                            <input type="text" id="custom-filename" placeholder="Custom filename (optional)">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="is-audio">
+                            <span class="checkmark"></span>
+                            Audio only
+                        </label>
+                        <button id="submit-url-btn" class="primary-btn">Download</button>
+                    </div>
+                </div>
+
+                <div class="jobs-container">
+                    <div class="jobs-header">
+                        <h3>Active Downloads</h3>
+                        <button id="refresh-jobs-btn" class="icon-btn" title="Refresh downloads">
+                            <i data-lucide="refresh-cw"></i>
+                        </button>
+                    </div>
+                    <div id="active-jobs-list" class="jobs-list">
+                        <div class="empty-state">No active downloads</div>
+                    </div>
+                </div>
+
+                <div class="jobs-container">
+                    <h3>Recent History</h3>
+                    <div id="history-jobs-list" class="jobs-list"></div>
+                </div>
+            </section>
+
+            <section id="files-page" class="page hidden">
+                <div class="card">
+                    <h2>Media Library</h2>
+                    <div id="files-list" class="files-list"></div>
+                </div>
+            </section>
+
+            <section id="discover-page" class="page hidden">
+                <div class="card">
+                    <div class="jobs-header">
+                        <h2>Discover</h2>
+                        <button id="refresh-news-btn" class="icon-btn" title="Refresh discover feed">
+                            <i data-lucide="refresh-cw"></i>
+                        </button>
+                    </div>
+                    <p class="settings-note">
+                        Personalized from what you ask FinchWire AI and what you watch/download.
+                    </p>
+                    <div id="discover-topics" class="chip-row"></div>
+                    <div id="discover-list" class="discover-list"></div>
+                </div>
+            </section>
+
+            <section id="settings-page" class="page hidden">
+                <div class="card">
+                    <h2>FinchWire Settings</h2>
+                    <div class="settings-group">
+                        <div class="setting-item">
+                            <label>Storage Root</label>
+                            <input type="text" id="setting-storage-path" readonly value="Auto-detected at runtime">
+                        </div>
+                        <div class="setting-item">
+                            <label>Playback Mode</label>
+                            <input type="text" readonly value="Browser-native player">
+                        </div>
+                    </div>
+                    <hr>
+                    <h3>Change Password</h3>
+                    <div class="settings-group">
+                        <div class="setting-item">
+                            <label>Current Password</label>
+                            <input type="password" id="setting-current-password" placeholder="Current password">
+                        </div>
+                        <div class="setting-item">
+                            <label>New Password</label>
+                            <input type="password" id="setting-new-password" placeholder="New password (min 8 chars)">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <button id="change-password-btn" class="primary-btn sm-btn">Update Password</button>
+                    </div>
+                    <hr>
+                    <h3>AI / TTS Providers</h3>
+                    <div class="settings-group">
+                        <div class="setting-item">
+                            <label>AI Provider</label>
+                            <select id="setting-ai-provider">
+                                <option value="none">None</option>
+                                <option value="gemini">Gemini</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="anthropic">Anthropic</option>
+                                <option value="grok">Grok (xAI)</option>
+                                <option value="groq">Groq</option>
+                            </select>
+                        </div>
+                        <div class="setting-item">
+                            <label>TTS Provider</label>
+                            <select id="setting-tts-provider">
+                                <option value="none">None</option>
+                                <option value="gemini">Gemini</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="elevenlabs">ElevenLabs</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <div class="setting-item">
+                            <label>AI API Key</label>
+                            <input type="password" id="setting-ai-api-key" placeholder="Paste AI API key (optional)">
+                        </div>
+                        <div class="setting-item">
+                            <label>TTS API Key</label>
+                            <input type="password" id="setting-tts-api-key" placeholder="Paste TTS API key (optional)">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <button id="save-provider-settings-btn" class="primary-btn sm-btn">Save Provider Settings</button>
+                    </div>
+                    <hr>
+                    <p class="settings-note">
+                        `yt.finchwire.site` and `media.p3lending.space` should both route to this same service on your T310.
+                    </p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="media-modal" class="modal-overlay hidden finchwire-media-root">
+        <div class="modal-content">
+            <button id="close-modal-btn" class="close-btn">&times;</button>
+            <div id="player-container"></div>
+            <div id="player-meta">
+                <h2 id="player-title"></h2>
+                <p class="player-hint">Browser playback</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

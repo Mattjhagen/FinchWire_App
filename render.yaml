@@ -13,7 +13,7 @@ services:
       - key: FINCHWIRE_SECRET_KEY
         generateValue: true
       - key: YT_DOWNLOAD_URL
-        value: https://yt.finchwire.site
+        value: http://localhost:3000
       # AI API Keys (Optional, can be set in Render dashboard)
       # - key: GEMINI_API_KEY
       #   sync: false

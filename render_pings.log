@@ -1,0 +1,7 @@
+Starting Render keep-alive pinger for https://finchwire-app.onrender.com/api/health
+Pinging every 5 minutes. Press Ctrl+C to stop (if running in foreground).
+[2026-04-05 20:25:54] Ping failed or app is waking up (Status: 502)
+[2026-04-05 20:37:56] Ping failed or app is waking up (Status: 502)
+[2026-04-05 20:49:57] Ping failed or app is waking up (Status: 502)
+[2026-04-05 21:02:18] Ping failed or app is waking up (Status: 502)
+[2026-04-05 21:14:27] Ping failed or app is waking up (Status: 502)
