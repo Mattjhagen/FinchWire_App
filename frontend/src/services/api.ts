@@ -383,7 +383,7 @@ class ApiService {
   }
 
   async getDevotional(): Promise<DevotionalResponse> {
-    return this.request<DevotionalResponse>('/home/devotional');
+    return this.request<DevotionalResponse>(API_ENDPOINTS.HOME_DEVOTIONAL);
   }
 
   async sendFeedInteraction(payload: FeedInteractionEvent): Promise<{ success: boolean }> {

@@ -25,6 +25,7 @@ export const API_ENDPOINTS = {
   HOME_WEATHER: '/api/home/weather',
   HOME_MARKET: '/api/home/market',
   HOME_VERSE: '/api/home/verse',
+  HOME_DEVOTIONAL: '/api/home/devotional',
   AI_SEARCH: '/api/ai/search',
   AI_SPEECH: '/api/ai/speech',
   FEED_INTERACTIONS: '/api/interactions/feed',
