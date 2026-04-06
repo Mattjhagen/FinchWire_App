@@ -36,25 +36,10 @@
               "scheme": "https",
               "host": "yt.finchwire.site",
               "pathPrefix": "/media/"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
-        },
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "https",
-              "host": "media.p3lending.space",
-              "pathPrefix": "/media/"
             },
             {
               "scheme": "https",
-              "host": "yt.finchwire.site",
+              "host": "finchwire-app.onrender.com",
               "pathPrefix": "/media/"
             }
           ],
