@@ -2,7 +2,7 @@ services:
   - type: web
     name: finchwire-app
     env: docker
-    dockerContext: backend
+    dockerContext: .
     dockerfilePath: Dockerfile
     plan: free # Note: free tier does not support persistent disks. For persistent state, upgrade to Starter.
     envVars:

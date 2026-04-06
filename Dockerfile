@@ -16,6 +16,7 @@ WORKDIR /app
 # gcc, g++, make, python3 for better-sqlite3 build
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    aria2 \
     libjq-dev \
     gcc \
     g++ \
@@ -43,11 +44,10 @@ COPY downloader-v2/ ./downloader-v2/
 RUN mkdir -p frontend/dist
 COPY --from=frontend-builder /app/frontend/dist/ ./frontend/dist/
 
-# Create a startup script to run both services
 RUN echo '#!/bin/sh\n\
-# Start Node.js Downloader in background\n\
-cd /app/downloader-v2 && node server.js &\n\
-# Start FastAPI Backend in foreground\n\
+# Start Node.js Downloader on internal port 3000\n\
+cd /app/downloader-v2 && PORT=3000 node server.js &\n\
+# Start FastAPI Backend on the public Render port\n\
 cd /app/backend && uvicorn server:app --host 0.0.0.0 --port ${PORT:-10000}\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 
