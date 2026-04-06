@@ -404,7 +404,13 @@ def get_verse_of_day() -> VerseOfDay:
         response.raise_for_status()
         payload = response.json()
     except Exception as exc:
-        raise ProviderError(f"Verse provider unavailable: {exc}") from exc
+        logger.error(f"Verse provider failed: {exc}. Using fallback.")
+        return VerseOfDay(
+            reference="Jeremiah 29:11",
+            text="For I know the plans I have for you,\" declares the Lord, \"plans to prosper you and not to harm you, plans to give you hope and a future.",
+            translation="NIV",
+            fetchedAt=str(time.time()),
+        )
 
     details = (
         payload.get("verse", {}).get("details", {})
@@ -415,7 +421,13 @@ def get_verse_of_day() -> VerseOfDay:
     text = str(details.get("text") or "").strip()
     translation = str(details.get("version") or "").strip() or None
     if not reference or not text:
-        raise ProviderError("Verse provider returned an empty payload.")
+        # Fallback to a core truth if provider fails
+        return VerseOfDay(
+            reference="Jeremiah 29:11",
+            text="For I know the plans I have for you,\" declares the Lord, \"plans to prosper you and not to harm you, plans to give you hope and a future.",
+            translation="NIV",
+            fetchedAt=str(time.time()),
+        )
 
     verse = VerseOfDay(
         reference=reference,
