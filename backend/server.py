@@ -128,6 +128,18 @@ def create_access_token(data: Dict[str, Any]) -> str:
 def verify_token(token: str) -> Optional[str]:
     if not token:
         return None
+    
+    # Try as direct admin password for extension support
+    users = _users()
+    admin = users.get("admin")
+    if admin and admin.get("password"):
+        try:
+            if pwd_context.verify(token, admin["password"]):
+                return "admin"
+        except Exception:
+            pass
+
+    # Try as JWT
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload.get("sub")
