@@ -1,5 +1,5 @@
-// Widget data fetchers — all free, no API key required
 // Weather: wttr.in  |  Market: CoinGecko  |  Verse: labs.bible.org  |  RSS: any feed URL
+import { Platform } from 'react-native';
 
 export interface WeatherData {
   temp_c: number;
@@ -117,7 +117,12 @@ const tagValue = (input: string, tag: string): string => {
 };
 
 export async function fetchRssFeed(feedUrl: string, label: string, limit = 8): Promise<RssItem[]> {
-  const res = await fetch(feedUrl, { headers: { Accept: 'application/rss+xml, application/xml, text/xml' } });
+  const isWeb = Platform.OS === 'web';
+  const finalUrl = isWeb
+    ? `https://finchwire-app.onrender.com/api/cors-proxy?url=${encodeURIComponent(feedUrl)}`
+    : feedUrl;
+
+  const res = await fetch(finalUrl, { headers: { Accept: 'application/rss+xml, application/xml, text/xml' } });
   if (!res.ok) throw new Error(`RSS ${res.status}`);
   const xml = await res.text();
 

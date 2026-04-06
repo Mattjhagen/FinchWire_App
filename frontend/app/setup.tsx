@@ -94,6 +94,7 @@ export default function SetupScreen() {
       followed_topics: [],
       followed_sources: [],
       followed_creators: [],
+      custom_rss_feeds: [],
     });
 
     await markSetupComplete();
@@ -152,6 +153,16 @@ export default function SetupScreen() {
             <Ionicons name="help-circle-outline" size={20} color={colors.primary} />
             <Text style={styles.helpButtonText}>How do I set this up?</Text>
           </TouchableOpacity>
+
+          {Platform.OS === 'web' && (
+            <TouchableOpacity
+              style={[styles.helpButton, { marginTop: spacing.sm }]}
+              onPress={() => setBackendUrl(DEFAULT_BACKEND_URL)}
+            >
+              <Ionicons name="refresh-circle-outline" size={20} color={colors.textSecondary} />
+              <Text style={[styles.helpButtonText, { color: colors.textSecondary }]}>Reset to Recommended Server</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Setup Help Modal */}

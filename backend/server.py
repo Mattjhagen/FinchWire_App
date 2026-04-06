@@ -723,6 +723,17 @@ async def health():
     return {"status": "ok", "timestamp": isoformat_utc(utcnow())}
 
 
+@api_router.get("/cors-proxy")
+async def cors_proxy(url: str = Query(...)):
+    import requests
+    from fastapi.responses import Response
+    try:
+        res = requests.get(url, timeout=10)
+        return Response(content=res.content, media_type=res.headers.get("content-type"))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @api_router.post("/login", response_model=AuthResponse)
 async def login(req: LoginRequest):
     users = _users()
