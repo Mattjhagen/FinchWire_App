@@ -51,7 +51,7 @@ from services.media_downloader import media_worker_loop
 
 
 ROOT_DIR = Path(__file__).parent
-MEDIA_DIR = ROOT_DIR / "media"
+MEDIA_DIR = Path(os.environ.get("FINCHWIRE_MEDIA_DIR", ROOT_DIR / "media"))
 MEDIA_DIR.mkdir(exist_ok=True)
 load_dotenv(ROOT_DIR / ".env")
 
@@ -248,6 +248,7 @@ def _resolve_ai_api_key(provider: str, settings: Dict[str, Any]) -> str:
         "anthropic": os.environ.get("ANTHROPIC_API_KEY", ""),
         "groq": os.environ.get("GROQ_API_KEY", ""),
         "grok": os.environ.get("XAI_API_KEY", "") or os.environ.get("GROK_API_KEY", ""),
+        "google": os.environ.get("GOOGLE_API_KEY", "") or os.environ.get("GOOGLE_TTS_API_KEY", "") or os.environ.get("GEMINI_API_KEY", ""),
     }
     return str(env_lookup.get(provider, "") or "").strip()
 

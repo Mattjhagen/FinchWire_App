@@ -101,6 +101,8 @@ def _request_json(url: str, headers: Dict[str, str], payload: Dict[str, Any], ti
 
     if response.status_code >= 400:
         snippet = response.text[:300]
+        if response.status_code == 429:
+            raise AiSearchError("AI Provider Rate Limit Reached (429). Try again in a minute or check your quota.")
         raise AiSearchError(f"Provider HTTP {response.status_code}: {snippet}")
 
     try:
@@ -149,26 +151,25 @@ def _run_openai_compatible(
 
 def _run_gemini(prompt: str, api_key: str, audio_base64: str | None = None, audio_mime: str | None = None) -> AiSearchResult:
     configured_model = os.environ.get("FINCHWIRE_GEMINI_MODEL", "").strip()
-    # Prioritize the verified model 'gemini-flash-latest' and the v1beta endpoint
-    models_to_try = [configured_model] if configured_model else ["gemini-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
+    # Prioritize 'gemini-1.5-flash' which is the current robust standard
+    models_to_try = [configured_model] if configured_model else ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-flash-latest"]
     
     last_exc = None
     for model in models_to_try:
         if not model: continue
-        # Use v1beta (verified working)
+        # Use v1beta (verified working for both text and multimodal)
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         
         parts = []
         if audio_base64 and audio_mime:
             parts.append({"inlineData": {"mimeType": audio_mime, "data": audio_base64}})
-        parts.append({"text": str(prompt or "Summarize this audio clip.").strip()})
+        
+        # Combine system instructions and prompt for robustness
+        full_prompt = f"{_PROMPT_TEMPLATE}\n\nUSER REQUEST: {str(prompt or 'Summarize this.').strip()}"
+        parts.append({"text": full_prompt})
         
         payload = {
-            "contents": [
-                {"role": "user", "parts": [{"text": _PROMPT_TEMPLATE}]},
-                {"role": "model", "parts": [{"text": "Understood. I will act as the FinchWire AI assistant."}]},
-                {"role": "user", "parts": parts}
-            ],
+            "contents": [{"role": "user", "parts": parts}],
             "generationConfig": {"temperature": 0.25},
         }
         try:
@@ -235,7 +236,7 @@ def run_ai_search(prompt: str, provider: str, api_key: str) -> AiSearchResult:
         if normalized_provider == "openai":
             endpoint = "https://api.openai.com/v1/chat/completions"
             model_env = "FINCHWIRE_OPENAI_MODEL"
-            default_model = "gpt-4.1-mini"
+            default_model = "gpt-4o-mini"
         elif normalized_provider == "groq":
             endpoint = "https://api.groq.com/openai/v1/chat/completions"
             model_env = "FINCHWIRE_GROQ_MODEL"
