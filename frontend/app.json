@@ -2,7 +2,7 @@
   "expo": {
     "name": "FinchWire",
     "slug": "finchwire",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "frontend",
@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "com.finchwire.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "googleServicesFile": "./firebase/google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
