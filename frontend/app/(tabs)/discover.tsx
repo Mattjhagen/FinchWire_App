@@ -95,17 +95,15 @@ export default function DiscoverScreen() {
     });
   };
 
-  const openSource = async (url: string) => {
-    try {
-      const supported = await Linking.canOpenURL(url);
-      if (!supported) {
-        Alert.alert('Cannot open link', 'This source URL is not available on your phone.');
-        return;
-      }
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert('Cannot open', 'Could not open this URL.');
-    }
+  const openSource = async (url: string, title?: string, source?: string) => {
+    router.push({
+      pathname: '/article',
+      params: {
+        url: encodeURIComponent(url),
+        title: title ? encodeURIComponent(title) : 'Source',
+        source: source ? encodeURIComponent(source) : encodeURIComponent(new URL(url).hostname),
+      },
+    });
   };
 
   const sendFeedback = async (

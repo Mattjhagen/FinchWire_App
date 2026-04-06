@@ -17,6 +17,7 @@ import { storageService } from '../src/services/storage';
 import { shouldRelockFromBackground } from '../src/features/app-lock/policy';
 import { AppLockGate } from '../src/components/AppLockGate';
 import { colors } from '../src/utils/theme';
+import { AIChatOverlay } from '../src/components/AIChatOverlay';
 
 const queryClient = new QueryClient();
 const PENDING_INCOMING_URL_KEY = '@finchwire_pending_incoming_url';
@@ -207,8 +208,9 @@ function RootLayoutNav() {
 
     if (shouldOpenInSharedPlayer(incomingUrl)) {
       router.push({
-        pathname: '/player/shared',
+        pathname: '/player/[id]',
         params: {
+          id: 'shared',
           url: incomingUrl,
           title: getSharedTitleFromUrl(incomingUrl),
         },
@@ -396,7 +398,9 @@ function RootLayoutNav() {
           biometricsEnabled={appLockBiometricsEnabled}
           onUnlock={() => setLocked(false)}
         />
-      ) : null}
+      ) : (
+        <AIChatOverlay />
+      )}
     </>
   );
 }

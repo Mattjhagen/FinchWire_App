@@ -347,13 +347,15 @@ export default function HomeScreen() {
     await Promise.all([refetchMedia(), refetchFeed(), refetchWeather(), refetchMarket(), refetchVerse(), refetchRss()]);
   };
 
-  const openExternal = async (url: string) => {
-    const canOpen = await Linking.canOpenURL(url);
-    if (!canOpen) {
-      Alert.alert('Cannot open link', 'Your phone could not open this link.');
-      return;
-    }
-    await Linking.openURL(url);
+  const openExternal = async (url: string, title?: string, source?: string) => {
+    router.push({
+      pathname: '/article',
+      params: {
+        url: encodeURIComponent(url),
+        title: title ? encodeURIComponent(title) : 'Article',
+        source: source ? encodeURIComponent(source) : encodeURIComponent(new URL(url).hostname),
+      },
+    });
   };
 
   const persistSettings = async (updater: (current: NonNullable<typeof settings>) => NonNullable<typeof settings>) => {
@@ -834,7 +836,11 @@ export default function HomeScreen() {
             </View>
             <View style={styles.cardList}>
               {(rssFeedItems ?? []).slice(0, 5).map((item) => (
-                <TouchableOpacity key={item.id} style={styles.newsCard} onPress={() => openExternal(item.link)}>
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.newsCard}
+                  onPress={() => openExternal(item.link || '', item.title, item.source)}
+                >
                   <Text style={styles.newsSource}>{item.source}</Text>
                   <Text style={styles.newsTitle} numberOfLines={2}>{item.title}</Text>
                 </TouchableOpacity>
@@ -1044,7 +1050,7 @@ export default function HomeScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.secondaryBtn]}
-                  onPress={() => openExternal(getExternalLink(job))}
+                  onPress={() => openExternal(getExternalLink(job), job.filename || 'Source', job.source_domain)}
                 >
                   <Ionicons name="link-outline" size={16} color={colors.text} />
                   <Text style={styles.actionBtnTextSecondary}>Open URL</Text>

@@ -97,6 +97,7 @@ export default function PlayerScreen() {
   const leftTapAtRef = useRef(0);
   const rightTapAtRef = useRef(0);
 
+
   const mediaHeaders = useMemo(() => {
     if (!media || localPath || !authToken || isSharedExternal) {
       return undefined;
@@ -142,6 +143,47 @@ export default function PlayerScreen() {
   useEffect(() => {
     (player as any).showSubtitles = showSubtitles;
   }, [player, showSubtitles]);
+  const handleOpenOriginalLink = useCallback(async () => {
+    const originalLink = String(media?.original_url || media?.url || '').trim();
+    if (!looksLikeUrl(originalLink)) {
+      Alert.alert('Original link unavailable', 'This item does not have a valid source URL to open.');
+      return;
+    }
+
+    try {
+      router.push({
+        pathname: '/article',
+        params: {
+          url: encodeURIComponent(originalLink),
+          title: encodeURIComponent(media?.filename || 'Source'),
+          source: encodeURIComponent(toSharedMediaDomain(originalLink)),
+        },
+      });
+    } catch {
+      Alert.alert('Unable to open link', 'Please try again.');
+    }
+  }, [media, router]);
+
+  const handleOpenInVlc = useCallback(async () => {
+    if (!media) return;
+    try {
+      setIsLaunchingExternalPlayer(true);
+      player.pause();
+      const vlcUrl = isSharedExternal && sharedPlaybackUrl
+        ? `vlc://${sharedPlaybackUrl}`
+        : apiService.getVlcUrl(mediaPath);
+      const canOpen = await Linking.canOpenURL(vlcUrl);
+      if (!canOpen) {
+        Alert.alert('VLC not found', 'Install VLC to open this media externally.');
+        return;
+      }
+      await Linking.openURL(vlcUrl);
+    } catch {
+      Alert.alert('Unable to open VLC', 'Please try again.');
+    } finally {
+      setTimeout(() => setIsLaunchingExternalPlayer(false), 1500);
+    }
+  }, [isSharedExternal, media, mediaPath, player, sharedPlaybackUrl]);
 
   const getSavedPosition = useCallback(async (mediaId: string): Promise<number> => {
     try {
@@ -573,40 +615,6 @@ export default function PlayerScreen() {
     }
   };
 
-  const handleOpenOriginalLink = useCallback(async () => {
-    const originalLink = String(media?.original_url || media?.url || '').trim();
-    if (!looksLikeUrl(originalLink)) {
-      Alert.alert('Original link unavailable', 'This item does not have a valid source URL to open.');
-      return;
-    }
-
-    try {
-      await Linking.openURL(originalLink);
-    } catch {
-      Alert.alert('Unable to open link', 'Please try again.');
-    }
-  }, [media]);
-
-  const handleOpenInVlc = useCallback(async () => {
-    if (!media) return;
-    try {
-      setIsLaunchingExternalPlayer(true);
-      player.pause();
-      const vlcUrl = isSharedExternal && sharedPlaybackUrl
-        ? `vlc://${sharedPlaybackUrl}`
-        : apiService.getVlcUrl(mediaPath);
-      const canOpen = await Linking.canOpenURL(vlcUrl);
-      if (!canOpen) {
-        Alert.alert('VLC not found', 'Install VLC to open this media externally.');
-        return;
-      }
-      await Linking.openURL(vlcUrl);
-    } catch {
-      Alert.alert('Unable to open VLC', 'Please try again.');
-    } finally {
-      setTimeout(() => setIsLaunchingExternalPlayer(false), 1500);
-    }
-  }, [isSharedExternal, media, mediaPath, player, sharedPlaybackUrl]);
 
   const handleToggleKeepDownload = async () => {
     if (!media || isUpdatingKeep) return;

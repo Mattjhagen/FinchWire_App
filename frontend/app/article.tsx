@@ -12,6 +12,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Alert,
+  Share,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -166,11 +168,15 @@ export default function ArticleScreen() {
     };
   }, [categories, creators, keywords, source, storyId, title, topics, url]);
 
-  const openExternal = async () => {
+  const shareLink = async () => {
     if (!url) return;
-    const supported = await Linking.canOpenURL(url);
-    if (supported) {
-      await Linking.openURL(url);
+    try {
+      await Share.share({
+        message: `${title}: ${url}`,
+        url: url,
+      });
+    } catch {
+      // Ignore share failures
     }
   };
 
@@ -366,8 +372,8 @@ export default function ArticleScreen() {
           <Text style={styles.title} numberOfLines={1}>{title}</Text>
           <Text style={styles.subtitle} numberOfLines={1}>{source || url}</Text>
         </View>
-        <TouchableOpacity style={styles.iconBtn} onPress={openExternal}>
-          <Ionicons name="open-outline" size={18} color={colors.text} />
+        <TouchableOpacity style={styles.iconBtn} onPress={shareLink}>
+          <Ionicons name="share-outline" size={18} color={colors.text} />
         </TouchableOpacity>
       </View>
 

@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { apiService } from '../../src/services/api';
@@ -39,6 +40,7 @@ const relativeTime = (iso: string): string => {
 };
 
 export default function AlertsScreen() {
+  const router = useRouter();
   const [channelId, setChannelId] = React.useState('');
   const [displayName, setDisplayName] = React.useState('');
   const [notifyOnLive, setNotifyOnLive] = React.useState(true);
@@ -135,11 +137,14 @@ export default function AlertsScreen() {
       // Ignore open state failures.
     }
     if (!notification.url) return;
-    try {
-      await Linking.openURL(notification.url);
-    } catch {
-      Alert.alert('Cannot open', 'Could not open notification URL.');
-    }
+    router.push({
+      pathname: '/article',
+      params: {
+        url: encodeURIComponent(notification.url),
+        title: encodeURIComponent(notification.title || 'Alert'),
+        source: encodeURIComponent('FinchWire Alert'),
+      },
+    });
   };
 
   return (
@@ -269,7 +274,14 @@ export default function AlertsScreen() {
               key={event.id}
               style={styles.itemCard}
               activeOpacity={0.8}
-              onPress={() => Linking.openURL(event.url).catch(() => undefined)}
+              onPress={() => router.push({
+                pathname: '/article',
+                params: {
+                  url: encodeURIComponent(event.url),
+                  title: encodeURIComponent(event.title || 'Event'),
+                  source: encodeURIComponent(event.eventType || 'Creator Event'),
+                },
+              })}
             >
               <Text style={styles.itemTitle} numberOfLines={2}>{event.title}</Text>
               <Text style={styles.itemMeta}>

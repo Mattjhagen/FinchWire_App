@@ -13,6 +13,7 @@ import {
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode, Audio } from 'expo-av';
+import { useRouter } from 'expo-router';
 import { borderRadius, colors, spacing, typography } from '../../../utils/theme';
 import { LiveChannel } from '../types';
 import { getLiveEmbedResult } from '../providers';
@@ -40,6 +41,7 @@ const WEBVIEW_USER_AGENT =
   'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 
 export function LivePlayer({ channel }: LivePlayerProps) {
+  const router = useRouter();
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 
@@ -84,7 +86,7 @@ export function LivePlayer({ channel }: LivePlayerProps) {
         setRuntimeError('The stream reached a timeout. It may be restricted or currently offline.');
         setIsLoading(false);
       }
-    }, 25000);
+    }, 25000) as any;
 
     return () => {
       if (loadingWatchdogRef.current) clearTimeout(loadingWatchdogRef.current);
@@ -127,8 +129,17 @@ export function LivePlayer({ channel }: LivePlayerProps) {
   }, []);
 
   const handleOpenExternal = useCallback(() => {
-    if (embed.sourceUrl) Linking.openURL(embed.sourceUrl).catch(() => undefined);
-  }, [embed.sourceUrl]);
+    if (embed.sourceUrl) {
+      router.push({
+        pathname: '/article',
+        params: {
+          url: encodeURIComponent(embed.sourceUrl),
+          title: encodeURIComponent(channel?.name || 'Live Stream'),
+          source: encodeURIComponent('YouTube Live'),
+        },
+      });
+    }
+  }, [embed.sourceUrl, channel?.name, router]);
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((v) => !v);
