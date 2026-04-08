@@ -9,48 +9,96 @@ import uuid
 
 logger = logging.getLogger("finchwire.downloader")
 
-def run_download_job(job: Dict[str, Any], media_dir: Path) -> Dict[str, Any]:
+# Default download directory, can be overridden by environment
+# For the user's setup, this could be a mounted drive on 192.168.1.32
+DEFAULT_DOWNLOAD_DIR = Path(os.environ.get("FINCHWIRE_DOWNLOAD_DIR", "/Users/matt/FinchWire_App/backend/media"))
+
+def run_download_job(job: Dict[str, Any], media_dir: Optional[Path] = None) -> Dict[str, Any]:
     """
     Executes a single download job using yt-dlp.
+    Tailored for local server storage (e.g. at 192.168.1.32).
     Updates the job dict with status and file info.
     """
+    if media_dir is None:
+        media_dir = DEFAULT_DOWNLOAD_DIR
+
     url = job.get("url")
     is_audio = job.get("is_audio", False)
-    safe_name = job.get("safe_filename") or f"media_{uuid.uuid4().hex[:8]}"
+    # VidBee-inspired naming
+    safe_name = job.get("safe_filename") or f"vidbee_{uuid.uuid4().hex[:8]}"
     
     # Ensure media dir exists
     media_dir.mkdir(exist_ok=True, parents=True)
     
-    # Prepare output template
-    ext = "mp3" if is_audio else "mp4"
-    # For Render/Serverless: If it's a YouTube URL, we can just use the embed link
-    if "youtube.com" in url or "youtu.be" in url:
-        try:
-            # Extract ID using yt-dlp quickly
-            meta_cmd = ["yt-dlp", "--get-id", url]
-            res = subprocess.check_output(meta_cmd, stderr=subprocess.STDOUT, text=True).strip()
-            if res:
-                job["status"] = "completed"
-                job["progress"] = 100
-                job["kind"] = "embed"
-                job["relative_path"] = f"https://www.youtube.com/embed/{res}"
-                job["filename"] = res
-                job["file_size"] = 0
-                logger.info(f"Using embed for YouTube URL: {res}")
-                return job
-        except Exception as e:
-            logger.warning(f"Failed to get YouTube ID for embed fallback: {e}")
-
-    # Standard download logic follows...
-    output_tpl = str(media_dir / f"{safe_name}.%(ext)s")
+    # Check if VidBee style playlist is requested
+    is_playlist = "list=" in url or job.get("is_playlist", False)
     
-    logger.info(f"Starting download for {url} (is_audio={is_audio})")
+    logger.info(f"Starting VidBee-style download for {url} (is_audio={is_audio}, is_playlist={is_playlist})")
     job["status"] = "downloading"
     job["progress"] = 0
     
+    # Enhanced command construction for VidBee-style bypass
+    # Start with base arguments
+    cmd = [
+        "yt-dlp",
+        "--newline",
+        "--add-metadata",
+        "--write-info-json",
+        "--no-mtime",
+        "--encoding", "utf-8",
+    ]
+
+    # Handle Extractor Args - prefer job-specific, fallback to impersonate for Cloudflare
+    job_extractor_args = job.get("extractor_args")
+    if job_extractor_args:
+        cmd += ["--extractor-args", job_extractor_args]
+    else:
+        cmd += ["--extractor-args", "generic:impersonate"]
+
+    # Output template
+    cmd += ["-o", str(media_dir / f"{safe_name}.%(ext)s")]
+    
+    # Custom binary paths if available (VidBee context)
+    vidbee_bin_dir = Path("/Applications/VidBee.app/Contents/Resources/resources")
+    if vidbee_bin_dir.exists():
+        ffmpeg_bin = vidbee_bin_dir / "ffmpeg"
+        if ffmpeg_bin.exists():
+             cmd += ["--ffmpeg-location", str(ffmpeg_bin)]
+        
+        deno_bin = vidbee_bin_dir / "deno"
+        if deno_bin.exists():
+             cmd += ["--js-runtimes", f"deno:{deno_bin}"]
+
+    # Cookie support - prioritized from job, fallback to default profile
+    job_cookies_browser = job.get("cookies_from_browser")
+    if job_cookies_browser:
+        cmd += ["--cookies-from-browser", job_cookies_browser]
+    else:
+        chrome_profile = "/Users/matt/Library/Application Support/Google/Chrome/Default"
+        if os.path.exists(chrome_profile):
+            cmd += ["--cookies-from-browser", f"chrome:{chrome_profile}"]
+    
+    job_cookies_file = job.get("cookies")
+    if job_cookies_file:
+        cmd += ["--cookies", job_cookies_file]
+    else:
+        default_cookies = "/Users/matt/Downloads/cookies.txt"
+        if os.path.exists(default_cookies):
+            cmd += ["--cookies", default_cookies]
+
+    if is_audio:
+        cmd += ["-x", "--audio-format", "mp3"]
+    else:
+        # User preferred format string
+        cmd += ["-f", "bestvideo+bestaudio[abr<=320]/bestvideo+bestaudio/best"]
+        cmd += ["--sub-langs", "all", "--embed-subs", "--embed-chapters"]
+
+    if not is_playlist:
+        cmd.append("--no-playlist")
+    
+    cmd.append(url)
+    
     try:
-        # We use subprocess.Popen to potentially track progress lines in the future, 
-        # but for now we'll just run it to completion.
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -60,13 +108,15 @@ def run_download_job(job: Dict[str, Any], media_dir: Path) -> Dict[str, Any]:
         )
         
         for line in process.stdout:
-            # Try to parse progress if possible (yt-dlp --newline output)
+            # yt-dlp --newline output parsing
             if "[download]" in line and "%" in line:
                 try:
                     parts = line.split()
                     for p in parts:
                         if "%" in p:
-                            val = float(p.replace("%", ""))
+                            p_clean = p.replace("%", "")
+                            # Handle cases like "100%" or "100.0%"
+                            val = float(p_clean)
                             job["progress"] = val
                             break
                 except:
@@ -77,16 +127,20 @@ def run_download_job(job: Dict[str, Any], media_dir: Path) -> Dict[str, Any]:
         if process.returncode == 0:
             # Find the actual file (yt-dlp might have changed the ext)
             actual_files = list(media_dir.glob(f"{safe_name}.*"))
-            if actual_files:
-                file_path = actual_files[0]
+            # Filter out info.json
+            media_files = [f for f in actual_files if not f.name.endswith(".info.json")]
+            
+            if media_files:
+                file_path = media_files[0]
                 job["status"] = "completed"
                 job["progress"] = 100
                 job["relative_path"] = file_path.name
                 job["filesize"] = file_path.stat().st_size
-                logger.info(f"Download completed: {file_path.name}")
+                job["absolute_path"] = str(file_path.absolute())
+                logger.info(f"Download completed: {file_path.name} at {job['absolute_path']}")
             else:
                 job["status"] = "failed"
-                job["error"] = "File not found after download"
+                job["error"] = "Media file not found after download"
         else:
             job["status"] = "failed"
             job["error"] = f"yt-dlp exited with code {process.returncode}"
@@ -98,17 +152,16 @@ def run_download_job(job: Dict[str, Any], media_dir: Path) -> Dict[str, Any]:
         
     return job
 
-async def media_worker_loop(store_ref: Any, media_dir: Path):
+async def media_worker_loop(store_ref: Any, media_dir: Optional[Path] = None):
     """
     Background loop that checks for 'queued' jobs and processes them.
-    If 'yt_download_url' is set in settings, it attempts to delegate to the external service.
+    Integrates with state store for persistence.
     """
-    logger.info("Media Downloader worker started.")
+    logger.info("VidBee-style Media Downloader worker started.")
+    media_dir = media_dir or DEFAULT_DOWNLOAD_DIR
+    
     while True:
         try:
-            settings = store_ref.get_collection("settings")
-            yt_url = str(settings.get("yt_download_url") or "").strip()
-            
             # Check for queued jobs
             downloads = store_ref.get_collection("downloads")
             if not isinstance(downloads, list):
@@ -118,45 +171,12 @@ async def media_worker_loop(store_ref: Any, media_dir: Path):
             queued_job = next((j for j in downloads if j.get("status") == "queued"), None)
             
             if queued_job:
-                if yt_url:
-                    # Delegate to external YT-Download (Media Drop)
-                    await _delegate_to_external_service(queued_job, yt_url)
-                else:
-                    # Process local with yt-dlp
-                    await asyncio.to_thread(run_download_job, queued_job, media_dir)
+                # Process local with yt-dlp
+                # This ensures we download locally to our server at 192.168.1.32
+                await asyncio.to_thread(run_download_job, queued_job, media_dir)
                 store_ref.save()
             
         except Exception as e:
             logger.error(f"Downloader loop error: {e}")
             
         await asyncio.sleep(5)
-
-async def _delegate_to_external_service(job: Dict[str, Any], service_url: Dict[str, Any]):
-    """
-    Sends a request to the external YT-Download server.
-    """
-    import requests
-    url = job.get("url")
-    is_audio = job.get("is_audio", False)
-    
-    # Standard Media Drop / YT-Download endpoint is usually /api/downloads or similar
-    # We'll assume the provided URL is the base and it has a POST /api/download (based on repo analysis)
-    target_endpoint = f"{service_url.rstrip('/')}/api/download"
-    
-    try:
-        payload = {"url": url, "isAudio": is_audio}
-        job["status"] = "downloading"
-        job["progress"] = 10 # Started
-        
-        # This is a fire-and-forget or status-check depending on how YT-Download responds
-        response = requests.post(target_endpoint, json=payload, timeout=10)
-        if response.status_code < 300:
-            job["status"] = "completed" # Or track if YT-Download provides a job ID
-            job["progress"] = 100
-            logger.info(f"Delegated download for {url} to external service.")
-        else:
-            job["status"] = "failed"
-            job["error"] = f"External service error: {response.status_code}"
-    except Exception as e:
-        job["status"] = "failed"
-        job["error"] = f"Failed to connect to external service: {str(e)}"

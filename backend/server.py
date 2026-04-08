@@ -47,7 +47,9 @@ from services.signal_algorithms import (
     update_interest_vector,
     utcnow,
 )
-from services.state_store import JsonStateStore
+from services.supabase_store import SupabaseStateStore
+from services.rss_discovery import update_suggested_feeds
+
 from services.media_downloader import media_worker_loop
 
 
@@ -60,7 +62,10 @@ logger = logging.getLogger("finchwire.api")
 logging.basicConfig(level=logging.INFO)
 
 STATE_FILE = Path(os.environ.get("FINCHWIRE_STATE_FILE", ROOT_DIR / "finchwire_state.json"))
-store = JsonStateStore(STATE_FILE)
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+store = SupabaseStateStore(STATE_FILE, supabase_url=SUPABASE_URL, supabase_key=SUPABASE_KEY)
+
 
 SECRET_KEY = os.environ.get("FINCHWIRE_SECRET_KEY", secrets.token_urlsafe(32))
 ALGORITHM = "HS256"
@@ -377,8 +382,18 @@ def _feed_urls_for_ingestion() -> List[str]:
 def ingest_story_cycle() -> Dict[str, int]:
     stories = _collection("stories")
     mentions = _collection("story_mentions")
+    # AI-powered RSS Discovery
+    update_suggested_feeds(store)
+    
     feed_urls = _feed_urls_for_ingestion()
+    # Add discovered feeds too
+    settings = _settings_state()
+    discovered = settings.get("discovered_feeds", [])
+    if discovered:
+        feed_urls = list(set(feed_urls + discovered))
+        
     incoming = ingest_feeds(feed_urls)
+
     merged = merge_stories(stories, mentions, incoming)
     store.replace_collection("stories", merged["stories"])
     store.replace_collection("story_mentions", merged["story_mentions"])
@@ -613,6 +628,9 @@ class DownloadRequest(BaseModel):
     filename: Optional[str] = None
     subfolder: Optional[str] = None
     is_audio: Optional[bool] = False
+    cookies: Optional[str] = None
+    cookies_from_browser: Optional[str] = None
+    extractor_args: Optional[str] = None
 
 
 class MediaJob(BaseModel):
@@ -637,6 +655,9 @@ class MediaJob(BaseModel):
     is_audio: bool = False
     keep_forever: bool = False
     view_count: int = 0
+    cookies: Optional[str] = None
+    cookies_from_browser: Optional[str] = None
+    extractor_args: Optional[str] = None
 
 
 class UpdateServerSettingsRequest(BaseModel):
@@ -1104,6 +1125,9 @@ async def submit_download(req: DownloadRequest, user: str = Depends(get_current_
         source_domain=source_domain,
         status="queued",
         is_audio=bool(req.is_audio),
+        cookies=req.cookies,
+        cookies_from_browser=req.cookies_from_browser,
+        extractor_args=req.extractor_args,
     )
     downloads = _collection("downloads")
     downloads.append(job.model_dump())
